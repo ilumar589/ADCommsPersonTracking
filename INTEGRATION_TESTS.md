@@ -1,19 +1,20 @@
 # YOLO11 Integration Tests
 
-This document describes the YOLO11 ONNX model integration tests using Testcontainers.
+This document describes the YOLO11 ONNX model integration tests with real model inference.
 
 ## Overview
 
 The integration tests in `ADCommsPersonTracking.Tests/Integration/YoloIntegrationTests.cs` validate the YOLO11 person detection functionality by:
 
-1. Spinning up a Docker container with the actual YOLO11 ONNX model
+1. Loading the actual YOLO11 ONNX model in the C# ObjectDetectionService
 2. Running real inference on test images
 3. Validating detection results and bounding box outputs
+
+These tests use the actual production code (`ObjectDetectionService`) with the real YOLO11 model to ensure accurate integration validation.
 
 ## Prerequisites
 
 ### Required Software
-- Docker Desktop or Docker Engine (must be running)
 - .NET 10 SDK
 - YOLO11 ONNX model (yolo11n.onnx)
 
@@ -41,7 +42,7 @@ The model will be saved to `models/yolo11n.onnx` (~11MB).
 
 ## Running the Integration Tests
 
-**Important**: Ensure Docker is running before executing integration tests.
+**Important**: Ensure the YOLO11 model is downloaded before running integration tests.
 
 ### All Integration Tests
 ```bash
@@ -57,12 +58,12 @@ dotnet test --filter "FullyQualifiedName~Integration"
 
 ### Specific Test
 ```bash
-dotnet test --filter "FullyQualifiedName~YoloIntegrationTests.Container_HealthCheck_ReturnsHealthy"
+dotnet test --filter "FullyQualifiedName~YoloIntegrationTests.DetectPersonsAsync_ModelLoadsSuccessfully"
 ```
 
 ### Unit Tests Only (Excluding Integration)
 ```bash
-# Skip integration tests (useful for CI where Docker might not be available)
+# Skip integration tests (useful for CI where model might not be downloaded)
 dotnet test --filter "Category!=Integration"
 
 # Or exclude by namespace
@@ -78,40 +79,40 @@ dotnet test
 
 The integration test suite covers the following scenarios:
 
-### 1. Container Health Check
-- **Test**: `Container_HealthCheck_ReturnsHealthy`
-- **Purpose**: Verifies the Docker container starts correctly and the model loads
-- **Expected**: Health endpoint returns "healthy" status with model_loaded=true
+### 1. Model Loading
+- **Test**: `DetectPersonsAsync_ModelLoadsSuccessfully`
+- **Purpose**: Verifies the YOLO11 ONNX model loads correctly in the ObjectDetectionService
+- **Expected**: Service initializes successfully and can process images
 
-### 2. Person Detection
-- **Test**: `Detect_WithImageContainingPerson_DetectsPerson`
-- **Purpose**: Tests detection on an image with a person-like shape
-- **Expected**: Valid response with detection structure (may or may not detect the simple shape)
-
-### 3. No Person Detection
-- **Test**: `Detect_WithImageWithoutPerson_ReturnsNoDetections`
+### 2. No Person Detection - Solid Color
+- **Test**: `DetectPersonsAsync_WithImageWithoutPerson_ReturnsNoDetections`
 - **Purpose**: Validates that solid color images don't trigger false person detections
 - **Expected**: Zero detections
 
-### 4. Empty Scene Detection
-- **Test**: `Detect_WithEmptyScene_ReturnsNoDetections`
+### 3. Empty Scene Detection
+- **Test**: `DetectPersonsAsync_WithEmptyScene_ReturnsNoDetections`
 - **Purpose**: Validates that gradient/empty scenes don't trigger false detections
 - **Expected**: Zero detections
 
-### 5. Confidence Threshold Filtering
-- **Test**: `Detect_WithCustomConfidenceThreshold_FiltersDetections`
-- **Purpose**: Tests that confidence threshold parameter works correctly
-- **Expected**: Only detections above threshold are returned
-
-### 6. Bounding Box Format
-- **Test**: `Detect_BoundingBoxFormat_IsCorrect`
+### 4. Bounding Box Format
+- **Test**: `DetectPersonsAsync_BoundingBoxFormat_IsCorrect`
 - **Purpose**: Validates the structure and format of detection results
-- **Expected**: All required fields present with valid values (x, y, width, height, confidence, label, class_id)
+- **Expected**: All required fields present with valid values (x, y, width, height, confidence, label)
 
-### 7. Model Information
-- **Test**: `ModelInfo_ReturnsCorrectInformation`
-- **Purpose**: Verifies model metadata is accessible
-- **Expected**: Correct input/output shape information (YOLO11: [1, 84, 8400])
+### 5. Confidence Threshold Validation
+- **Test**: `DetectPersonsAsync_DetectionsHaveValidConfidence`
+- **Purpose**: Ensures all detections meet the minimum confidence threshold
+- **Expected**: All detections have confidence >= 0.45 and <= 1.0
+
+### 6. Consistency Check
+- **Test**: `DetectPersonsAsync_WithMultipleImages_ProducesConsistentResults`
+- **Purpose**: Validates that running inference multiple times produces consistent results
+- **Expected**: Same image produces same detection count
+
+### 7. Performance Test
+- **Test**: `DetectPersonsAsync_WithValidImage_CompletesWithinReasonableTime`
+- **Purpose**: Ensures inference completes in reasonable time
+- **Expected**: Detection completes within 10 seconds
 
 ## Test Images
 
@@ -123,28 +124,25 @@ Test images are located in `ADCommsPersonTracking.Tests/TestData/Images/`:
 
 These images are generated by the `create-test-images.py` script.
 
-## Docker Container Architecture
+## Integration Test Architecture
 
-The integration tests use a Python Flask server running in a Docker container:
+The integration tests directly use the C# `ObjectDetectionService` with the actual YOLO11 ONNX model:
 
-- **Base Image**: `python:3.12-slim`
-- **Model**: YOLO11n ONNX (mounted from host)
-- **Runtime**: ONNX Runtime 1.20.1
-- **Endpoints**:
-  - `GET /health` - Health check
-  - `POST /detect` - Perform detection (accepts image bytes)
-  - `GET /info` - Model information
+- **Service**: `ADCommsPersonTracking.Api.Services.ObjectDetectionService`
+- **Model**: YOLO11n ONNX (~11MB)
+- **Runtime**: Microsoft.ML.OnnxRuntime 1.20.1
+- **Test Framework**: xUnit with FluentAssertions
 
-### Container Files
-- `Dockerfile.yolo` - Docker image definition
-- `yolo_inference_server.py` - Flask server for inference
-- `models/yolo11n.onnx` - YOLO11 model (not committed, generated)
+### Key Files
+- `ADCommsPersonTracking.Tests/Integration/YoloIntegrationTests.cs` - Integration test suite
+- `models/yolo11n.onnx` - YOLO11 model (downloaded via script, not committed)
+- `ADCommsPersonTracking.Tests/TestData/Images/` - Test images
 
 ## CI/CD Considerations
 
 ### GitHub Actions
 
-The integration tests can run in GitHub Actions with Docker support:
+The integration tests can run in GitHub Actions:
 
 ```yaml
 jobs:
@@ -169,71 +167,72 @@ jobs:
           python download-model.py
       
       - name: Run integration tests
-        run: dotnet test --filter "FullyQualifiedName~Integration"
+        run: dotnet test --filter "Category=Integration"
 ```
-
-**Note**: Docker is pre-installed on GitHub Actions Ubuntu runners, so no additional setup is needed for Testcontainers.
 
 ## Troubleshooting
 
-### Docker Not Running
-```
-Error: Cannot connect to the Docker daemon
-```
-**Solution**: Ensure Docker Desktop or Docker Engine is running.
-
 ### Model Not Found
 ```
-Warning: Model not found at /app/models/yolo11n.onnx
+InvalidOperationException: YOLO11 model not found at models/yolo11n.onnx
 ```
-**Solution**: Run `python download-model.py` to download the model before running tests.
+**Solution**: Run `python download-model.py` to download the model before running integration tests.
 
-### Port Already in Use
+### ONNX Runtime Errors
 ```
-Error: Port 5000 is already allocated
-```
-**Solution**: Testcontainers uses dynamic port mapping, but if you see this error, stop any services using port 5000.
-
-### Container Build Fails
-```
-Error: Docker build failed
-```
-**Solution**: Ensure `Dockerfile.yolo` and `yolo_inference_server.py` are present in the repository root.
-
-### Tests Timeout
-```
-TimeoutException: Container did not start within the specified timeout
+Error: Failed to load ONNX model
 ```
 **Solution**: 
-- Check Docker has enough resources (CPU, memory)
-- Increase timeout in test configuration
-- Verify network connectivity for image pulls
+- Ensure the model file is not corrupted (should be ~11MB)
+- Re-download the model using `python download-model.py`
+- Verify Microsoft.ML.OnnxRuntime package is installed
+
+### Test Images Not Found
+```
+FileNotFoundException: Could not find file 'TestData/Images/person.jpg'
+```
+**Solution**: 
+- Ensure test images exist in `ADCommsPersonTracking.Tests/TestData/Images/`
+- Run `python create-test-images.py` to generate test images if missing
+
+### Tests Run Slowly
+**Solution**: 
+- Integration tests perform real ONNX inference which can take 1-10 seconds per test on CPU
+- This is expected behavior for integration tests with real model inference
+- Consider using `--filter "Category!=Integration"` to skip these tests during rapid development
 
 ## Performance Notes
 
-- **First Run**: Slower due to Docker image building (~2-3 minutes)
-- **Subsequent Runs**: Faster as Docker caches the image (~30-60 seconds per test)
-- **Model Loading**: Takes ~5-10 seconds in container startup
-- **Inference**: ~100-500ms per image on CPU
+- **Model Loading**: ~1-3 seconds when ObjectDetectionService initializes
+- **Inference**: ~100-500ms per image on CPU (640x640 input)
+- **Test Suite**: ~10-30 seconds for all 7 integration tests
+- **First Run**: Same as subsequent runs (no Docker caching needed)
 
 ## Local Development
 
-For faster iteration during development, you can run the inference server locally:
+For faster iteration during development, you can skip integration tests:
 
 ```bash
-# Install dependencies
-pip install flask onnxruntime numpy pillow
+# Run only unit tests (skips integration tests)
+dotnet test --filter "Category!=Integration"
 
-# Run server
-python yolo_inference_server.py
+# Run with watch mode for rapid feedback
+dotnet watch test --filter "Category!=Integration"
+```
 
-# Test manually
-curl -X POST -H "Content-Type: image/jpeg" --data-binary @test.jpg http://localhost:5000/detect
+To run integration tests after making changes:
+
+```bash
+# Ensure model is downloaded
+python download-model.py
+
+# Run integration tests only
+dotnet test --filter "Category=Integration"
 ```
 
 ## Additional Resources
 
-- [Testcontainers for .NET Documentation](https://dotnet.testcontainers.org/)
 - [YOLO11 Documentation](https://docs.ultralytics.com/)
 - [ONNX Runtime Documentation](https://onnxruntime.ai/)
-- [Docker Documentation](https://docs.docker.com/)
+- [Microsoft.ML.OnnxRuntime NuGet Package](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/)
+- [xUnit Testing Framework](https://xunit.net/)
