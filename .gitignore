@@ -60,8 +60,10 @@ $RECYCLE.BIN/
 # Mac
 .DS_Store
 
-# ONNX models (large files)
+# ONNX models and PyTorch models (large files)
 *.onnx
+*.pt
+*.pth
 models/
 
 # API keys and secrets

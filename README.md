@@ -11,6 +11,7 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 - **Cross-Camera Tracking**: Tracks persons as they move between different camera views
 - **Bounding Box Output**: Returns precise bounding boxes with annotated images for all detections
 - **RESTful API**: Easy-to-use HTTP API for integration with camera systems
+- **Comprehensive Testing**: 59 unit tests + Docker-based integration tests with real YOLO11 model inference
 
 ## Architecture
 
@@ -96,12 +97,27 @@ The API will start on `https://localhost:5001` (or `http://localhost:5000`).
 
 ### 4. Run Tests
 
+#### Unit Tests Only
 ```bash
 cd /path/to/ADCommsPersonTracking
-dotnet test
+dotnet test --filter "Category!=Integration"
 ```
 
-All 47 tests should pass.
+All 59 unit tests should pass.
+
+#### Integration Tests (Optional)
+Integration tests use Docker and Testcontainers to test the YOLO11 model with real inference. See [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md) for details.
+
+```bash
+# Requires Docker to be running and YOLO11 model downloaded
+python download-model.py
+dotnet test --filter "Category=Integration"
+```
+
+#### All Tests
+```bash
+dotnet test
+```
 
 ## API Usage
 
@@ -318,6 +334,39 @@ For old hardware, consider:
 **The system currently returns ALL detected persons in the frame, regardless of the search prompt criteria.** The prompt feature extraction (colors, clothing, etc.) is implemented and parsed, but the actual filtering by those attributes is not yet functional. To implement attribute-based filtering, you would need to integrate an additional computer vision model that can recognize clothing colors, accessories, and other visual attributes.
 
 This implementation provides the foundation for person detection and tracking. The extracted features from the prompt are included in the response for reference, but they do not filter the detections.
+
+## Testing
+
+### Unit Tests
+The project includes 59 comprehensive unit tests covering:
+- Object detection service (YOLO11 integration)
+- Person tracking and ID assignment
+- Image annotation and bounding box drawing
+- Color analysis and feature extraction
+- Controller endpoints
+
+Run unit tests only:
+```bash
+dotnet test --filter "Category!=Integration"
+```
+
+### Integration Tests
+Real integration tests using **Testcontainers** with an actual YOLO11 ONNX model running in Docker:
+- Container health checks
+- Person detection on real images
+- Confidence threshold validation
+- Bounding box format verification
+- Model information queries
+
+**Requirements**: Docker must be running and YOLO11 model downloaded.
+
+See [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md) for detailed instructions.
+
+Run integration tests:
+```bash
+python download-model.py  # Download model first
+dotnet test --filter "Category=Integration"
+```
 
 ## Cross-Camera Tracking
 
