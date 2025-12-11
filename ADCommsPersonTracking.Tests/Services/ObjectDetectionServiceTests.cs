@@ -27,7 +27,7 @@ public class ObjectDetectionServiceTests
     }
 
     [Fact]
-    public async Task DetectPersonsAsync_WithoutModel_ReturnsMockDetections()
+    public async Task DetectPersonsAsync_WithoutModel_ReturnsEmptyList()
     {
         // Arrange
         var imageBytes = CreateTestImage(640, 480);
@@ -36,17 +36,9 @@ public class ObjectDetectionServiceTests
         var result = await _service.DetectPersonsAsync(imageBytes);
 
         // Assert
+        // When model is not available, service returns empty list
         result.Should().NotBeNull();
-        result.Should().NotBeEmpty();
-        result.Should().AllSatisfy(box =>
-        {
-            box.Label.Should().Be("person");
-            box.Confidence.Should().BeGreaterThan(0);
-            box.X.Should().BeGreaterThanOrEqualTo(0);
-            box.Y.Should().BeGreaterThanOrEqualTo(0);
-            box.Width.Should().BeGreaterThan(0);
-            box.Height.Should().BeGreaterThan(0);
-        });
+        result.Should().BeEmpty();
     }
 
     [Fact]
