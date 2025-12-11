@@ -1,0 +1,34 @@
+# Dockerfile for YOLO11 ONNX inference service
+# This container provides a simple HTTP API for YOLO11 object detection
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    flask==3.1.0 \
+    onnxruntime==1.20.1 \
+    numpy==1.26.4 \
+    pillow==11.0.0
+
+# Copy the YOLO11 ONNX model
+COPY models/yolo11n.onnx /app/models/yolo11n.onnx
+
+# Copy the inference server script
+COPY yolo_inference_server.py /app/
+
+# Expose port for the inference API
+EXPOSE 5000
+
+# Set environment variables
+ENV FLASK_APP=yolo_inference_server.py
+ENV MODEL_PATH=/app/models/yolo11n.onnx
+
+# Run the inference server
+CMD ["python", "yolo_inference_server.py"]

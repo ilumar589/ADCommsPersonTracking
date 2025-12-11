@@ -1,0 +1,13 @@
+# Git LFS configuration for large files
+
+# ONNX models (if committing directly)
+*.onnx filter=lfs diff=lfs merge=lfs -text
+
+# PyTorch models
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.pth filter=lfs diff=lfs merge=lfs -text
+
+# Other large binary files
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+*.pb filter=lfs diff=lfs merge=lfs -text
