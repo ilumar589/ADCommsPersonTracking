@@ -1,0 +1,270 @@
+using ADCommsPersonTracking.Api.Controllers;
+using ADCommsPersonTracking.Api.Models;
+using ADCommsPersonTracking.Api.Services;
+using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Moq;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+
+namespace ADCommsPersonTracking.Tests.Controllers;
+
+public class PersonTrackingControllerTests
+{
+    private readonly Mock<IPersonTrackingService> _trackingServiceMock;
+    private readonly PersonTrackingController _controller;
+
+    public PersonTrackingControllerTests()
+    {
+        _trackingServiceMock = new Mock<IPersonTrackingService>();
+        var logger = Mock.Of<ILogger<PersonTrackingController>>();
+        _controller = new PersonTrackingController(_trackingServiceMock.Object, logger);
+    }
+
+    [Fact]
+    public async Task TrackPersons_WithValidRequest_ReturnsOkResult()
+    {
+        // Arrange
+        var request = CreateTestRequest();
+        var response = CreateTestResponse();
+
+        _trackingServiceMock
+            .Setup(s => s.ProcessFrameAsync(It.IsAny<TrackingRequest>()))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _controller.TrackPersons(request);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(response);
+    }
+
+    [Fact]
+    public async Task TrackPersons_WithMissingImage_ReturnsBadRequest()
+    {
+        // Arrange
+        var request = new TrackingRequest
+        {
+            ImageBase64 = "",
+            Prompt = "Find a person",
+            CameraId = "camera-01",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackPersons(request);
+
+        // Assert
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest = result.Result as BadRequestObjectResult;
+        badRequest!.Value.Should().Be("Image data is required");
+    }
+
+    [Fact]
+    public async Task TrackPersons_WithMissingPrompt_ReturnsBadRequest()
+    {
+        // Arrange
+        var imageBytes = CreateTestImage(640, 480);
+        var request = new TrackingRequest
+        {
+            ImageBase64 = Convert.ToBase64String(imageBytes),
+            Prompt = "",
+            CameraId = "camera-01",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackPersons(request);
+
+        // Assert
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest = result.Result as BadRequestObjectResult;
+        badRequest!.Value.Should().Be("Search prompt is required");
+    }
+
+    [Fact]
+    public async Task TrackPersons_WithException_ReturnsInternalServerError()
+    {
+        // Arrange
+        var request = CreateTestRequest();
+
+        _trackingServiceMock
+            .Setup(s => s.ProcessFrameAsync(It.IsAny<TrackingRequest>()))
+            .ThrowsAsync(new Exception("Test exception"));
+
+        // Act
+        var result = await _controller.TrackPersons(request);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>();
+        var objectResult = result.Result as ObjectResult;
+        objectResult!.StatusCode.Should().Be(500);
+        objectResult.Value.Should().Be("Internal server error");
+    }
+
+    [Fact]
+    public async Task GetActiveTracks_ReturnsOkWithTracks()
+    {
+        // Arrange
+        var tracks = new List<PersonTrack>
+        {
+            new PersonTrack
+            {
+                TrackingId = "track_001",
+                CameraId = "camera-01",
+                FirstSeen = DateTime.UtcNow.AddMinutes(-5),
+                LastSeen = DateTime.UtcNow,
+                LastKnownPosition = new BoundingBox { X = 100, Y = 150, Width = 120, Height = 280, Confidence = 0.85f, Label = "person" }
+            }
+        };
+
+        _trackingServiceMock
+            .Setup(s => s.GetActiveTracksAsync())
+            .ReturnsAsync(tracks);
+
+        // Act
+        var result = await _controller.GetActiveTracks();
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(tracks);
+    }
+
+    [Fact]
+    public async Task GetActiveTracks_WithNoTracks_ReturnsEmptyList()
+    {
+        // Arrange
+        _trackingServiceMock
+            .Setup(s => s.GetActiveTracksAsync())
+            .ReturnsAsync(new List<PersonTrack>());
+
+        // Act
+        var result = await _controller.GetActiveTracks();
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        var tracks = okResult!.Value as List<PersonTrack>;
+        tracks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetTrack_WithValidId_ReturnsOkWithTrack()
+    {
+        // Arrange
+        var trackingId = "track_001";
+        var track = new PersonTrack
+        {
+            TrackingId = trackingId,
+            CameraId = "camera-01",
+            FirstSeen = DateTime.UtcNow.AddMinutes(-5),
+            LastSeen = DateTime.UtcNow,
+            LastKnownPosition = new BoundingBox { X = 100, Y = 150, Width = 120, Height = 280, Confidence = 0.85f, Label = "person" }
+        };
+
+        _trackingServiceMock
+            .Setup(s => s.GetTrackByIdAsync(trackingId))
+            .ReturnsAsync(track);
+
+        // Act
+        var result = await _controller.GetTrack(trackingId);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(track);
+    }
+
+    [Fact]
+    public async Task GetTrack_WithInvalidId_ReturnsNotFound()
+    {
+        // Arrange
+        var trackingId = "nonexistent_id";
+
+        _trackingServiceMock
+            .Setup(s => s.GetTrackByIdAsync(trackingId))
+            .ReturnsAsync((PersonTrack?)null);
+
+        // Act
+        var result = await _controller.GetTrack(trackingId);
+
+        // Assert
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        var notFound = result.Result as NotFoundObjectResult;
+        notFound!.Value.Should().Be($"Track with ID '{trackingId}' not found");
+    }
+
+    [Fact]
+    public void HealthCheck_ReturnsOk()
+    {
+        // Act
+        var result = _controller.HealthCheck();
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        var okResult = result as OkObjectResult;
+        okResult!.Value.Should().NotBeNull();
+    }
+
+    private TrackingRequest CreateTestRequest()
+    {
+        var imageBytes = CreateTestImage(640, 480);
+        return new TrackingRequest
+        {
+            CameraId = "test-camera-01",
+            ImageBase64 = Convert.ToBase64String(imageBytes),
+            Prompt = "Find a person wearing a green jacket",
+            Timestamp = DateTime.UtcNow
+        };
+    }
+
+    private TrackingResponse CreateTestResponse()
+    {
+        return new TrackingResponse
+        {
+            CameraId = "test-camera-01",
+            Timestamp = DateTime.UtcNow,
+            AnnotatedImageBase64 = "base64AnnotatedImage",
+            Detections = new List<Detection>
+            {
+                new Detection
+                {
+                    TrackingId = "track_001",
+                    BoundingBox = new BoundingBox
+                    {
+                        X = 100,
+                        Y = 150,
+                        Width = 120,
+                        Height = 280,
+                        Confidence = 0.85f,
+                        Label = "person"
+                    },
+                    Description = "green, jacket",
+                    MatchScore = 0.85f
+                }
+            },
+            ProcessingMessage = "Processed frame with 1 person detections"
+        };
+    }
+
+    private byte[] CreateTestImage(int width, int height)
+    {
+        using var image = new Image<Rgb24>(width, height);
+        
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                image[x, y] = new Rgb24((byte)(x % 256), (byte)(y % 256), 128);
+            }
+        }
+
+        using var memoryStream = new MemoryStream();
+        image.SaveAsJpeg(memoryStream);
+        return memoryStream.ToArray();
+    }
+}

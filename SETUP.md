@@ -5,7 +5,6 @@
 ### 1. Prerequisites
 
 - .NET 10 SDK installed
-- Anthropic API key (for Claude Opus 4.5 access)
 - Python 3.8+ with pip (for YOLO11 model export)
 
 ### 2. Install Ultralytics YOLO (for model export)
@@ -45,29 +44,7 @@ mkdir -p ADCommsPersonTracking.Api/models
 mv yolo11n.onnx ADCommsPersonTracking.Api/models/
 ```
 
-### 5. Configure Anthropic API Key
-
-**Option 1: Environment Variable (Recommended)**
-
-```bash
-export Anthropic__ApiKey="sk-ant-your-key-here"
-```
-
-**Option 2: appsettings.Development.json**
-
-Create `ADCommsPersonTracking.Api/appsettings.Development.json`:
-
-```json
-{
-  "Anthropic": {
-    "ApiKey": "sk-ant-your-key-here"
-  }
-}
-```
-
-⚠️ Never commit API keys to source control!
-
-### 6. Build and Run
+### 5. Build and Run
 
 ```bash
 cd ADCommsPersonTracking.Api
@@ -172,6 +149,34 @@ dotnet add package Microsoft.ML.OnnxRuntime.Gpu
 
 Update service registration in `Program.cs` to use GPU execution provider.
 
+## Configuration
+
+The system can be configured via `appsettings.json`:
+
+```json
+{
+  "ObjectDetection": {
+    "ModelPath": "models/yolo11n.onnx",
+    "ConfidenceThreshold": 0.45,
+    "IouThreshold": 0.5
+  },
+  "ImageAnnotation": {
+    "BoxColor": "#00FF00",
+    "BoxThickness": 2,
+    "ShowLabels": true,
+    "FontSize": 12
+  }
+}
+```
+
+- **ModelPath**: Path to the YOLO11 ONNX model file
+- **ConfidenceThreshold**: Minimum confidence for person detection (0.0 - 1.0)
+- **IouThreshold**: Threshold for Non-Maximum Suppression overlap
+- **BoxColor**: Hex color for bounding boxes (e.g., "#00FF00" for green)
+- **BoxThickness**: Thickness of bounding box lines in pixels
+- **ShowLabels**: Whether to show confidence labels on boxes
+- **FontSize**: Size of label text
+
 ## Troubleshooting
 
 ### Issue: "Could not load ONNX model"
@@ -182,13 +187,7 @@ Update service registration in `Program.cs` to use GPU execution provider.
 ls -la ADCommsPersonTracking.Api/models/yolo11n.onnx
 ```
 
-### Issue: "Anthropic API key not configured"
-
-**Solution**: Set the environment variable or update `appsettings.Development.json`:
-
-```bash
-export Anthropic__ApiKey="your-key-here"
-```
+If the model is missing, the system will use mock detections for testing.
 
 ### Issue: Out of memory on old hardware
 
@@ -249,8 +248,9 @@ docker run -p 5000:80 -e Anthropic__ApiKey="your-key" adcomms-tracking
 ```bash
 export ASPNETCORE_ENVIRONMENT=Production
 export ASPNETCORE_URLS="http://+:5000"
-export Anthropic__ApiKey="your-production-key"
 export ObjectDetection__ModelPath="/app/models/yolo11n.onnx"
+export ObjectDetection__ConfidenceThreshold="0.45"
+export ImageAnnotation__BoxColor="#00FF00"
 ```
 
 ## Integration with Camera Systems

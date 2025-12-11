@@ -1,14 +1,15 @@
 # ADComms Person Tracking System
 
-A .NET 10 web application for real-time person tracking across train cameras using YOLO11 object detection and Claude Opus 4.5 for intelligent prompt-based matching.
+A .NET 10 web application for real-time person tracking across train cameras using YOLO11 object detection with rule-based prompt feature extraction and image annotation capabilities.
 
 ## Features
 
 - **Video Frame Processing**: Receives and processes video frames from multiple train cameras
 - **Person Detection**: Uses YOLO11 ONNX model for lightweight, efficient person detection
-- **AI-Powered Matching**: Uses Claude Opus 4.5 to match detected persons against natural language prompts
+- **Rule-Based Feature Extraction**: Parses natural language prompts to extract colors, clothing, accessories, and physical attributes
+- **Image Annotation**: Returns annotated images with bounding boxes drawn around detected persons
 - **Cross-Camera Tracking**: Tracks persons as they move between different camera views
-- **Bounding Box Output**: Returns precise bounding boxes for all matched detections
+- **Bounding Box Output**: Returns precise bounding boxes with annotated images for all detections
 - **RESTful API**: Easy-to-use HTTP API for integration with camera systems
 
 ## Architecture
@@ -16,26 +17,26 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 ### Components
 
 1. **Object Detection Service**: Uses YOLO11 (ONNX Runtime) for fast person detection
-2. **Claude Service**: Integrates Claude Opus 4.5 for:
-   - Parsing natural language tracking prompts
-   - Extracting visual features from descriptions
-   - Matching detected persons to search criteria
-3. **Person Tracking Service**: Coordinates detection and tracking across cameras
-4. **REST API**: Exposes endpoints for frame submission and track queries
+2. **Prompt Feature Extractor**: Parses natural language prompts to extract:
+   - Colors (red, blue, green, yellow, black, white, etc.)
+   - Clothing items (jacket, coat, shirt, pants, etc.)
+   - Accessories (bag, backpack, suitcase, umbrella, etc.)
+   - Physical attributes (height, build)
+3. **Image Annotation Service**: Draws bounding boxes on images with optional labels
+4. **Person Tracking Service**: Coordinates detection and tracking across cameras
+5. **REST API**: Exposes endpoints for frame submission and track queries
 
 ### Technology Stack
 
 - .NET 10
 - ASP.NET Core Web API
 - Microsoft.ML.OnnxRuntime (YOLO11)
-- Anthropic Claude SDK (Claude Opus 4.5)
-- SixLabors.ImageSharp (Image processing)
+- SixLabors.ImageSharp (Image processing and annotation)
 
 ## Prerequisites
 
 - .NET 10 SDK
 - YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants)
-- Anthropic API key for Claude Opus 4.5
 
 ## Installation
 
@@ -46,50 +47,43 @@ git clone https://github.com/ilumar589/ADCommsPersonTracking.git
 cd ADCommsPersonTracking
 ```
 
-### 2. Download YOLO11 Model
+### 2. Get the YOLO11 ONNX Model
 
-Download a YOLO11 ONNX model (recommended: yolo11n.onnx for lightweight operation):
+#### Option 1: Export using Python (Recommended)
 
-```bash
-mkdir -p ADCommsPersonTracking.Api/models
-# Download from Ultralytics or export your own YOLO11 model to ONNX format
-# Place the model at: ADCommsPersonTracking.Api/models/yolo11n.onnx
-```
+1. Install Python 3.8+ and pip
+2. Install Ultralytics:
+   ```bash
+   pip install ultralytics
+   ```
+3. Create and run export script:
+   ```python
+   from ultralytics import YOLO
+   
+   # Download and load YOLO11 nano model (fastest, smallest)
+   model = YOLO('yolo11n.pt')
+   
+   # Export to ONNX format
+   model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)
+   ```
+4. Move the generated `yolo11n.onnx` to `ADCommsPersonTracking.Api/models/`:
+   ```bash
+   mkdir -p ADCommsPersonTracking.Api/models
+   mv yolo11n.onnx ADCommsPersonTracking.Api/models/
+   ```
 
-To export YOLO11 to ONNX format using Ultralytics:
+#### Option 2: Download Pre-exported Model
 
-```python
-from ultralytics import YOLO
+Download from Ultralytics GitHub releases or HuggingFace:
+- **yolo11n.onnx** (~6MB) - Nano, fastest (recommended for old hardware)
+- **yolo11s.onnx** (~22MB) - Small
+- **yolo11m.onnx** (~50MB) - Medium
+- **yolo11l.onnx** (~87MB) - Large
+- **yolo11x.onnx** (~136MB) - Extra Large
 
-# Load YOLO11 model
-model = YOLO('yolo11n.pt')
+Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
-# Export to ONNX
-model.export(format='onnx')
-```
-
-### 3. Configure API Keys
-
-Update `appsettings.json` with your Anthropic API key:
-
-```json
-{
-  "Anthropic": {
-    "ApiKey": "your-anthropic-api-key-here"
-  },
-  "ObjectDetection": {
-    "ModelPath": "models/yolo11n.onnx"
-  }
-}
-```
-
-Or use environment variables:
-
-```bash
-export Anthropic__ApiKey="your-anthropic-api-key-here"
-```
-
-### 4. Build and Run
+### 3. Build and Run
 
 ```bash
 cd ADCommsPersonTracking.Api
@@ -99,6 +93,15 @@ dotnet run
 ```
 
 The API will start on `https://localhost:5001` (or `http://localhost:5000`).
+
+### 4. Run Tests
+
+```bash
+cd /path/to/ADCommsPersonTracking
+dotnet test
+```
+
+All 47 tests should pass.
 
 ## API Usage
 
@@ -132,11 +135,12 @@ The API will start on `https://localhost:5001` (or `http://localhost:5000`).
         "confidence": 0.89,
         "label": "person"
       },
-      "description": "yellow jacket, black hat, suitcase",
+      "description": "yellow, jacket, black, hat, suitcase",
       "matchScore": 0.89
     }
   ],
-  "processingMessage": "Processed frame with 3 detections, 1 matches found"
+  "annotatedImageBase64": "base64-encoded-jpeg-image-with-bounding-boxes-drawn",
+  "processingMessage": "Processed frame with 1 person detections"
 }
 ```
 
@@ -257,6 +261,24 @@ curl http://localhost:5000/api/persontracking/health
 
 ## Configuration
 
+Edit `appsettings.json` to configure the application:
+
+```json
+{
+  "ObjectDetection": {
+    "ModelPath": "models/yolo11n.onnx",
+    "ConfidenceThreshold": 0.45,
+    "IouThreshold": 0.5
+  },
+  "ImageAnnotation": {
+    "BoxColor": "#00FF00",
+    "BoxThickness": 2,
+    "ShowLabels": true,
+    "FontSize": 12
+  }
+}
+```
+
 ### Model Selection
 
 The system supports different YOLO11 model sizes:
@@ -282,10 +304,20 @@ For old hardware, consider:
 
 1. **Frame Reception**: Camera sends video frame (base64 encoded) with search prompt
 2. **Object Detection**: YOLO11 detects all persons in the frame
-3. **Feature Extraction**: Claude Opus 4.5 extracts visual features from the prompt
-4. **Matching**: Claude analyzes detections and matches them to the prompt criteria
+3. **Feature Extraction**: Rule-based extractor parses the prompt to identify:
+   - Colors (green, blue, red, etc.)
+   - Clothing items (jacket, pants, hat, etc.)
+   - Accessories (backpack, suitcase, umbrella, etc.)
+   - Physical attributes (height, build)
+4. **Image Annotation**: Draws bounding boxes on the original image
 5. **Tracking**: System assigns tracking IDs and maintains person trajectories
-6. **Response**: Returns bounding boxes for matched persons
+6. **Response**: Returns annotated image with bounding boxes and detection data
+
+## Important Note: Current Limitations
+
+**The system currently returns ALL detected persons in the frame, regardless of the search prompt criteria.** The prompt feature extraction (colors, clothing, etc.) is implemented and parsed, but the actual filtering by those attributes is not yet functional. To implement attribute-based filtering, you would need to integrate an additional computer vision model that can recognize clothing colors, accessories, and other visual attributes.
+
+This implementation provides the foundation for person detection and tracking. The extracted features from the prompt are included in the response for reference, but they do not filter the detections.
 
 ## Cross-Camera Tracking
 
@@ -315,17 +347,20 @@ The system maintains person tracks across cameras by:
 
 ### Model Not Found
 
-If you see "YOLO11 ONNX model not found", the system will use mock detections. Download and place the YOLO11 model at the configured path.
-
-### Claude API Errors
-
-Ensure your Anthropic API key is valid and has access to Claude Opus 4.5. Check logs for specific error messages.
+If you see "YOLO11 ONNX model not found", the system will use mock detections. Download and place the YOLO11 model at the configured path as described in the installation section.
 
 ### Low Detection Accuracy
 
 - Ensure adequate lighting in camera feeds
 - Use higher resolution frames
 - Consider using a larger YOLO11 model (s, m, l variants)
+- Adjust the `ConfidenceThreshold` in `appsettings.json` (default: 0.45)
+
+### No Bounding Boxes Visible
+
+- Check that `ImageAnnotation:ShowLabels` is set to `true`
+- Verify the `BoxColor` is visible against your image background
+- Increase `BoxThickness` if boxes are too thin
 
 ## License
 

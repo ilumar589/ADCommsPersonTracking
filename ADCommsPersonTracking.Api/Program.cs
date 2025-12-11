@@ -8,7 +8,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
 // Register application services
-builder.Services.AddSingleton<ITrackingLlmService, TrackingLlmService>();
+builder.Services.AddSingleton<IPromptFeatureExtractor, PromptFeatureExtractor>();
+builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>();
 builder.Services.AddSingleton<IObjectDetectionService, ObjectDetectionService>();
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
