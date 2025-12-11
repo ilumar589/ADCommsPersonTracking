@@ -313,7 +313,11 @@ For old hardware, consider:
 5. **Tracking**: System assigns tracking IDs and maintains person trajectories
 6. **Response**: Returns annotated image with bounding boxes and detection data
 
-**Note**: The current system returns all detected persons. To filter by specific attributes (e.g., "green jacket"), you would need to integrate an additional attribute recognition model.
+## Important Note: Current Limitations
+
+**The system currently returns ALL detected persons in the frame, regardless of the search prompt criteria.** The prompt feature extraction (colors, clothing, etc.) is implemented and parsed, but the actual filtering by those attributes is not yet functional. To implement attribute-based filtering, you would need to integrate an additional computer vision model that can recognize clothing colors, accessories, and other visual attributes.
+
+This implementation provides the foundation for person detection and tracking. The extracted features from the prompt are included in the response for reference, but they do not filter the detections.
 
 ## Cross-Camera Tracking
 

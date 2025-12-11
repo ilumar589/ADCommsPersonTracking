@@ -64,7 +64,7 @@ public class PersonTrackingService : IPersonTrackingService
                 CameraId = request.CameraId,
                 Timestamp = request.Timestamp,
                 AnnotatedImageBase64 = annotatedImageBase64,
-                ProcessingMessage = $"Processed frame with {detections.Count} person detections"
+                ProcessingMessage = $"Processed frame with {detections.Count} person detections. Note: Currently returns all detected persons; attribute-based filtering requires additional ML model."
             };
 
             // Add all detected persons to response
