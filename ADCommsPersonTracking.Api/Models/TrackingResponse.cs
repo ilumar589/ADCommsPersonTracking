@@ -6,6 +6,7 @@ public class TrackingResponse
     public DateTime Timestamp { get; set; }
     public List<Detection> Detections { get; set; } = new();
     public string ProcessingMessage { get; set; } = string.Empty;
+    public string AnnotatedImageBase64 { get; set; } = string.Empty;
 }
 
 public class Detection

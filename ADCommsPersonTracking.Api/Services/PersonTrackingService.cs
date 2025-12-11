@@ -6,18 +6,21 @@ namespace ADCommsPersonTracking.Api.Services;
 public class PersonTrackingService : IPersonTrackingService
 {
     private readonly IObjectDetectionService _detectionService;
-    private readonly ITrackingLlmService _llmService;
+    private readonly IPromptFeatureExtractor _featureExtractor;
+    private readonly IImageAnnotationService _annotationService;
     private readonly ILogger<PersonTrackingService> _logger;
     private readonly ConcurrentDictionary<string, PersonTrack> _activeTracks = new();
     private readonly TimeSpan _trackTimeout = TimeSpan.FromMinutes(5);
 
     public PersonTrackingService(
         IObjectDetectionService detectionService,
-        ITrackingLlmService llmService,
+        IPromptFeatureExtractor featureExtractor,
+        IImageAnnotationService annotationService,
         ILogger<PersonTrackingService> logger)
     {
         _detectionService = detectionService;
-        _llmService = llmService;
+        _featureExtractor = featureExtractor;
+        _annotationService = annotationService;
         _logger = logger;
     }
 
@@ -31,60 +34,60 @@ public class PersonTrackingService : IPersonTrackingService
             // Decode base64 image
             var imageBytes = Convert.FromBase64String(request.ImageBase64);
 
-            // Detect persons in the frame
+            // Detect persons in the frame using YOLO11
             var detections = await _detectionService.DetectPersonsAsync(imageBytes);
             _logger.LogInformation("Detected {Count} persons in frame", detections.Count);
 
-            // Extract search features from the prompt using LLM
-            var searchFeatures = await _llmService.ExtractSearchFeaturesAsync(request.Prompt);
+            // Extract search features from the prompt using rule-based extraction
+            var searchCriteria = _featureExtractor.ExtractFeatures(request.Prompt);
+            var searchFeatures = new List<string>();
+            searchFeatures.AddRange(searchCriteria.Colors);
+            searchFeatures.AddRange(searchCriteria.ClothingItems);
+            searchFeatures.AddRange(searchCriteria.Accessories);
+            searchFeatures.AddRange(searchCriteria.PhysicalAttributes);
+            if (searchCriteria.Height != null)
+            {
+                searchFeatures.Add($"height: {searchCriteria.Height.OriginalText}");
+            }
             _logger.LogInformation("Extracted {Count} search features from prompt", searchFeatures.Count);
 
-            // Create detection descriptions for LLM to analyze
-            var detectionDescriptions = detections.Select((d, i) => 
-                $"Person at position ({d.X:F0}, {d.Y:F0}), size: {d.Width:F0}x{d.Height:F0}, confidence: {d.Confidence:F2}")
-                .ToList();
+            // For now, return all detected persons since YOLO11 detects persons but not specific attributes
+            // In a production system, you would need a separate attribute detection model
+            var matchedDetections = detections;
 
-            // Use LLM to match detections to the prompt
-            var matchingIndices = new List<string>();
-            if (detectionDescriptions.Any())
-            {
-                matchingIndices = await _llmService.MatchDetectionsToPromptAsync(
-                    request.Prompt, detectionDescriptions);
-            }
+            // Annotate the image with bounding boxes
+            var annotatedImageBase64 = await _annotationService.AnnotateImageAsync(imageBytes, matchedDetections);
 
             // Build response with matched detections
             var response = new TrackingResponse
             {
                 CameraId = request.CameraId,
                 Timestamp = request.Timestamp,
-                ProcessingMessage = $"Processed frame with {detections.Count} detections, {matchingIndices.Count} matches found"
+                AnnotatedImageBase64 = annotatedImageBase64,
+                ProcessingMessage = $"Processed frame with {detections.Count} person detections"
             };
 
-            // Add matched detections to response
-            foreach (var indexStr in matchingIndices)
+            // Add all detected persons to response
+            foreach (var detection in matchedDetections)
             {
-                if (int.TryParse(indexStr, out int index) && index >= 0 && index < detections.Count)
+                var trackingId = GetOrCreateTrackingId(request.CameraId, detection, request.Timestamp);
+
+                response.Detections.Add(new Detection
                 {
-                    var detection = detections[index];
-                    var trackingId = GetOrCreateTrackingId(request.CameraId, detection, request.Timestamp);
+                    TrackingId = trackingId,
+                    BoundingBox = detection,
+                    Description = string.Join(", ", searchFeatures),
+                    MatchScore = detection.Confidence
+                });
 
-                    response.Detections.Add(new Detection
-                    {
-                        TrackingId = trackingId,
-                        BoundingBox = detection,
-                        Description = string.Join(", ", searchFeatures),
-                        MatchScore = detection.Confidence
-                    });
-
-                    // Update tracking information
-                    UpdateTrack(trackingId, request.CameraId, detection, searchFeatures, request.Timestamp);
-                }
+                // Update tracking information
+                UpdateTrack(trackingId, request.CameraId, detection, searchFeatures, request.Timestamp);
             }
 
             // Clean up old tracks
             CleanupOldTracks();
 
-            _logger.LogInformation("Returning {Count} matched detections", response.Detections.Count);
+            _logger.LogInformation("Returning {Count} detections with annotated image", response.Detections.Count);
             return response;
         }
         catch (Exception ex)
