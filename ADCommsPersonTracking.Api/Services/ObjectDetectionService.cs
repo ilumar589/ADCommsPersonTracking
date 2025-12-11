@@ -45,11 +45,10 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     {
         try
         {
-            // If no model is loaded, return mock detections for demonstration
             if (_session == null)
             {
-                _logger.LogInformation("Using mock detection data");
-                return await Task.FromResult(GenerateMockDetections());
+                _logger.LogWarning("Inference session is not initialized. Returning mock detections.");
+                throw new InvalidOperationException("Inference session is not initialized.");
             }
 
             using var image = Image.Load<Rgb24>(imageBytes);
