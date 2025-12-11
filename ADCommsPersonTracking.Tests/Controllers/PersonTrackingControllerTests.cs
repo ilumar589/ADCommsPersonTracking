@@ -48,9 +48,8 @@ public class PersonTrackingControllerTests
         // Arrange
         var request = new TrackingRequest
         {
-            ImageBase64 = "",
+            ImagesBase64 = new List<string>(),
             Prompt = "Find a person",
-            CameraId = "camera-01",
             Timestamp = DateTime.UtcNow
         };
 
@@ -60,7 +59,7 @@ public class PersonTrackingControllerTests
         // Assert
         result.Result.Should().BeOfType<BadRequestObjectResult>();
         var badRequest = result.Result as BadRequestObjectResult;
-        badRequest!.Value.Should().Be("Image data is required");
+        badRequest!.Value.Should().Be("At least one image is required");
     }
 
     [Fact]
@@ -70,9 +69,8 @@ public class PersonTrackingControllerTests
         var imageBytes = CreateTestImage(640, 480);
         var request = new TrackingRequest
         {
-            ImageBase64 = Convert.ToBase64String(imageBytes),
+            ImagesBase64 = new List<string> { Convert.ToBase64String(imageBytes) },
             Prompt = "",
-            CameraId = "camera-01",
             Timestamp = DateTime.UtcNow
         };
 
@@ -114,7 +112,6 @@ public class PersonTrackingControllerTests
             new PersonTrack
             {
                 TrackingId = "track_001",
-                CameraId = "camera-01",
                 FirstSeen = DateTime.UtcNow.AddMinutes(-5),
                 LastSeen = DateTime.UtcNow,
                 LastKnownPosition = new BoundingBox { X = 100, Y = 150, Width = 120, Height = 280, Confidence = 0.85f, Label = "person" }
@@ -160,7 +157,6 @@ public class PersonTrackingControllerTests
         var track = new PersonTrack
         {
             TrackingId = trackingId,
-            CameraId = "camera-01",
             FirstSeen = DateTime.UtcNow.AddMinutes(-5),
             LastSeen = DateTime.UtcNow,
             LastKnownPosition = new BoundingBox { X = 100, Y = 150, Width = 120, Height = 280, Confidence = 0.85f, Label = "person" }
@@ -215,8 +211,7 @@ public class PersonTrackingControllerTests
         var imageBytes = CreateTestImage(640, 480);
         return new TrackingRequest
         {
-            CameraId = "test-camera-01",
-            ImageBase64 = Convert.ToBase64String(imageBytes),
+            ImagesBase64 = new List<string> { Convert.ToBase64String(imageBytes) },
             Prompt = "Find a person wearing a green jacket",
             Timestamp = DateTime.UtcNow
         };
@@ -226,28 +221,35 @@ public class PersonTrackingControllerTests
     {
         return new TrackingResponse
         {
-            CameraId = "test-camera-01",
             Timestamp = DateTime.UtcNow,
-            AnnotatedImageBase64 = "base64AnnotatedImage",
-            Detections = new List<Detection>
+            Results = new List<ImageDetectionResult>
             {
-                new Detection
+                new ImageDetectionResult
                 {
-                    TrackingId = "track_001",
-                    BoundingBox = new BoundingBox
+                    ImageIndex = 0,
+                    AnnotatedImageBase64 = "base64AnnotatedImage",
+                    Detections = new List<Detection>
                     {
-                        X = 100,
-                        Y = 150,
-                        Width = 120,
-                        Height = 280,
-                        Confidence = 0.85f,
-                        Label = "person"
-                    },
-                    Description = "green, jacket",
-                    MatchScore = 0.85f
+                        new Detection
+                        {
+                            TrackingId = "track_001",
+                            BoundingBox = new BoundingBox
+                            {
+                                X = 100,
+                                Y = 150,
+                                Width = 120,
+                                Height = 280,
+                                Confidence = 0.85f,
+                                Label = "person"
+                            },
+                            Description = "green, jacket",
+                            MatchScore = 0.85f,
+                            MatchedCriteria = new List<string> { "green" }
+                        }
+                    }
                 }
             },
-            ProcessingMessage = "Processed frame with 1 person detections"
+            ProcessingMessage = "Processed 1 images with 1 person detections"
         };
     }
 

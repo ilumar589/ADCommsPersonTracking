@@ -29,9 +29,9 @@ public class PersonTrackingController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TrackingResponse>> TrackPersons([FromBody] TrackingRequest request)
     {
-        if (string.IsNullOrEmpty(request.ImageBase64))
+        if (request.ImagesBase64 == null || request.ImagesBase64.Count == 0)
         {
-            return BadRequest("Image data is required");
+            return BadRequest("At least one image is required");
         }
 
         if (string.IsNullOrEmpty(request.Prompt))
