@@ -11,6 +11,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<IPromptFeatureExtractor, PromptFeatureExtractor>();
 builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>();
 builder.Services.AddSingleton<IObjectDetectionService, ObjectDetectionService>();
+builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
 // Add CORS for web clients

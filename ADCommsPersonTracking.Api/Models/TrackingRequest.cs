@@ -2,8 +2,7 @@ namespace ADCommsPersonTracking.Api.Models;
 
 public class TrackingRequest
 {
-    public string CameraId { get; set; } = string.Empty;
-    public string ImageBase64 { get; set; } = string.Empty;
+    public List<string> ImagesBase64 { get; set; } = new();
     public string Prompt { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
 }
