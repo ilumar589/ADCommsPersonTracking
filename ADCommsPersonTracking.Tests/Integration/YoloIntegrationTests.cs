@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Reflection;
 using ADCommsPersonTracking.Api.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -17,7 +19,7 @@ namespace ADCommsPersonTracking.Tests.Integration;
 public class YoloIntegrationTests : IDisposable
 {
     private readonly ObjectDetectionService _service;
-    private const string TestDataPath = "TestData/Images";
+    private readonly string _testDataPath;
     private readonly string _modelPath;
 
     public YoloIntegrationTests()
@@ -30,6 +32,7 @@ public class YoloIntegrationTests : IDisposable
         }
         
         _modelPath = Path.Combine(repoRoot, "models", "yolo11n.onnx");
+        _testDataPath = Path.Combine(repoRoot, "ADCommsPersonTracking.Tests", "TestData", "Images");
         
         // Skip tests if model doesn't exist
         if (!File.Exists(_modelPath))
@@ -73,7 +76,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_ModelLoadsSuccessfully()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
@@ -87,7 +90,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_WithImageWithoutPerson_ReturnsNoDetections()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "no_person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "no_person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
@@ -102,7 +105,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_WithEmptyScene_ReturnsNoDetections()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "empty_scene.jpg");
+        var imagePath = Path.Combine(_testDataPath, "empty_scene.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
@@ -117,7 +120,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_BoundingBoxFormat_IsCorrect()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
@@ -141,7 +144,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_DetectionsHaveValidConfidence()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
@@ -161,7 +164,7 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_WithMultipleImages_ProducesConsistentResults()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "no_person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "no_person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act - Run detection twice on the same image
@@ -178,17 +181,16 @@ public class YoloIntegrationTests : IDisposable
     public async Task DetectPersonsAsync_WithValidImage_CompletesWithinReasonableTime()
     {
         // Arrange
-        var imagePath = Path.Combine(TestDataPath, "person.jpg");
+        var imagePath = Path.Combine(_testDataPath, "person.jpg");
         var imageBytes = await File.ReadAllBytesAsync(imagePath);
 
         // Act
-        var startTime = DateTime.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
         var detections = await _service.DetectPersonsAsync(imageBytes);
-        var endTime = DateTime.UtcNow;
-        var duration = endTime - startTime;
+        stopwatch.Stop();
 
         // Assert - Detection should complete within 10 seconds on reasonable hardware
-        duration.Should().BeLessThan(TimeSpan.FromSeconds(10));
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
         detections.Should().NotBeNull();
     }
 }
