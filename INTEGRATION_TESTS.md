@@ -41,18 +41,32 @@ The model will be saved to `models/yolo11n.onnx` (~11MB).
 
 ## Running the Integration Tests
 
+**Important**: Ensure Docker is running before executing integration tests.
+
 ### All Integration Tests
 ```bash
-# Run only integration tests
-dotnet test --filter "FullyQualifiedName~Integration"
+# Run only integration tests by category
+dotnet test --filter "Category=Integration"
 
 # Run with detailed output
-dotnet test --filter "FullyQualifiedName~Integration" --logger "console;verbosity=detailed"
+dotnet test --filter "Category=Integration" --logger "console;verbosity=detailed"
+
+# Alternative: Run by namespace
+dotnet test --filter "FullyQualifiedName~Integration"
 ```
 
 ### Specific Test
 ```bash
 dotnet test --filter "FullyQualifiedName~YoloIntegrationTests.Container_HealthCheck_ReturnsHealthy"
+```
+
+### Unit Tests Only (Excluding Integration)
+```bash
+# Skip integration tests (useful for CI where Docker might not be available)
+dotnet test --filter "Category!=Integration"
+
+# Or exclude by namespace
+dotnet test --filter "FullyQualifiedName!~Integration"
 ```
 
 ### All Tests (Unit + Integration)

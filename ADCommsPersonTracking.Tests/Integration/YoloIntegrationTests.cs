@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Volumes;
 using FluentAssertions;
 
 namespace ADCommsPersonTracking.Tests.Integration;
@@ -11,7 +12,10 @@ namespace ADCommsPersonTracking.Tests.Integration;
 /// Integration tests for YOLO11 ONNX model using Testcontainers.
 /// These tests spin up a Docker container with the actual YOLO11 model
 /// and perform real inference to validate detection capabilities.
+/// NOTE: These tests require Docker to be running and the YOLO11 model to be downloaded.
+/// Run 'python download-model.py' to download the model before running these tests.
 /// </summary>
+[Trait("Category", "Integration")]
 public class YoloIntegrationTests : IAsyncLifetime
 {
     private IContainer? _container;
@@ -21,32 +25,27 @@ public class YoloIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Build the Docker image for YOLO11 inference
-        var dockerfilePath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..");
+        // Get path to repository root
+        var repoRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..");
+        var modelsPath = Path.Combine(repoRoot, "models");
+        var serverScriptPath = Path.Combine(repoRoot, "yolo_inference_server.py");
         
+        // Build container with Python and required packages
         _container = new ContainerBuilder()
-            .WithImage("yolo11-inference:test")
+            .WithImage("python:3.12-slim")
             .WithPortBinding(ContainerPort, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r
                 .ForPath("/health")
                 .ForPort(ContainerPort)
                 .ForStatusCode(HttpStatusCode.OK)))
-            .WithResourceMapping(
-                Path.Combine(dockerfilePath, "models"), 
-                "/app/models",
-                Unix.FileMode644)
-            .WithResourceMapping(
-                Path.Combine(dockerfilePath, "yolo_inference_server.py"),
-                "/app/yolo_inference_server.py",
-                Unix.FileMode644)
+            .WithBindMount(modelsPath, "/app/models")
+            .WithBindMount(serverScriptPath, "/app/yolo_inference_server.py")
             .WithEnvironment("MODEL_PATH", "/app/models/yolo11n.onnx")
-            .WithEnvironment("FLASK_APP", "yolo_inference_server.py")
-            .WithCommand("python", "yolo_inference_server.py")
-            .WithImageFrom(new ImageFromDockerfileBuilder()
-                .WithDockerfileDirectory(dockerfilePath)
-                .WithDockerfile("Dockerfile.yolo")
-                .WithBuildArgument("BUILDKIT_INLINE_CACHE", "1")
-                .Build())
+            .WithWorkingDirectory("/app")
+            .WithCommand("/bin/sh", "-c", 
+                "apt-get update && apt-get install -y --no-install-recommends libgomp1 && " +
+                "pip install --no-cache-dir flask==3.1.0 onnxruntime==1.20.1 numpy==1.26.4 pillow==11.0.0 && " +
+                "python yolo_inference_server.py")
             .Build();
 
         await _container.StartAsync();
