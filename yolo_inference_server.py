@@ -51,14 +51,25 @@ def preprocess_image(image_bytes, input_size=640):
     
     return img_array, original_size
 
-def postprocess_output(output, original_size, confidence_threshold=0.45, iou_threshold=0.5, input_size=640):
-    """Process YOLO11 output to extract person detections."""
+def convert_coordinates(cx, cy, w, h, original_size, input_size=640):
+    """Convert bounding box from model coordinates to original image coordinates."""
+    scale_x = original_size[0] / input_size
+    scale_y = original_size[1] / input_size
+    
+    x = (cx - w / 2) * scale_x
+    y = (cy - h / 2) * scale_y
+    width = w * scale_x
+    height = h * scale_y
+    
+    return float(x), float(y), float(width), float(height)
+
+def extract_detections(output, confidence_threshold=0.45):
+    """Extract person detections from YOLO11 output."""
     detections = []
     
     # YOLO11 output shape: [1, 84, 8400]
     # 84 = 4 (bbox) + 80 (classes)
     output = output[0]  # Remove batch dimension
-    
     num_detections = output.shape[1]
     
     for i in range(num_detections):
@@ -72,24 +83,34 @@ def postprocess_output(output, original_size, confidence_threshold=0.45, iou_thr
             # Get bounding box coordinates (center format)
             cx, cy, w, h = output[0:4, i]
             
-            # Convert from model coordinates to original image coordinates
-            scale_x = original_size[0] / input_size
-            scale_y = original_size[1] / input_size
-            
-            x = (cx - w / 2) * scale_x
-            y = (cy - h / 2) * scale_y
-            width = w * scale_x
-            height = h * scale_y
-            
             detections.append({
-                'x': float(x),
-                'y': float(y),
-                'width': float(width),
-                'height': float(height),
+                'coords': (cx, cy, w, h),
                 'confidence': max_score,
-                'label': 'person',
                 'class_id': max_class
             })
+    
+    return detections
+
+def postprocess_output(output, original_size, confidence_threshold=0.45, iou_threshold=0.5, input_size=640):
+    """Process YOLO11 output to extract person detections."""
+    # Extract raw detections
+    raw_detections = extract_detections(output, confidence_threshold)
+    
+    # Convert coordinates to original image space
+    detections = []
+    for det in raw_detections:
+        cx, cy, w, h = det['coords']
+        x, y, width, height = convert_coordinates(cx, cy, w, h, original_size, input_size)
+        
+        detections.append({
+            'x': x,
+            'y': y,
+            'width': width,
+            'height': height,
+            'confidence': det['confidence'],
+            'label': 'person',
+            'class_id': det['class_id']
+        })
     
     # Apply Non-Maximum Suppression
     detections = apply_nms(detections, iou_threshold)
@@ -124,9 +145,14 @@ def calculate_iou(box1, box2):
     intersection_area = max(0, x2 - x1) * max(0, y2 - y1)
     box1_area = box1['width'] * box1['height']
     box2_area = box2['width'] * box2['height']
+    
+    # Handle edge cases: zero-area boxes or no overlap
+    if box1_area <= 0 or box2_area <= 0:
+        return 0.0
+    
     union_area = box1_area + box2_area - intersection_area
     
-    return intersection_area / union_area if union_area > 0 else 0
+    return intersection_area / union_area if union_area > 0 else 0.0
 
 @app.route('/health', methods=['GET'])
 def health():

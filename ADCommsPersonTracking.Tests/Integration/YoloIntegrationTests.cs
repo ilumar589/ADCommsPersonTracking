@@ -25,8 +25,13 @@ public class YoloIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Get path to repository root
-        var repoRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..");
+        // Get path to repository root by searching for .git directory
+        var repoRoot = FindRepositoryRoot(Directory.GetCurrentDirectory());
+        if (repoRoot == null)
+        {
+            throw new InvalidOperationException("Could not find repository root directory");
+        }
+        
         var modelsPath = Path.Combine(repoRoot, "models");
         var serverScriptPath = Path.Combine(repoRoot, "yolo_inference_server.py");
         
@@ -60,6 +65,20 @@ public class YoloIntegrationTests : IAsyncLifetime
         {
             await _container.DisposeAsync();
         }
+    }
+
+    private static string? FindRepositoryRoot(string startPath)
+    {
+        var directory = new DirectoryInfo(startPath);
+        while (directory != null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            {
+                return directory.FullName;
+            }
+            directory = directory.Parent;
+        }
+        return null;
     }
 
     [Fact]
