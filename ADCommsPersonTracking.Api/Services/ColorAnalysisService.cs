@@ -53,10 +53,16 @@ public class ColorAnalysisService : IColorAnalysisService
             // Crop to person region
             var personRegion = image.Clone(ctx => ctx.Crop(new Rectangle(x, y, width, height)));
 
-            // Analyze different body regions
-            var upperBodyColors = await AnalyzeRegionAsync(personRegion, 0, 0, width, (int)(height * 0.5), 3);
-            var lowerBodyColors = await AnalyzeRegionAsync(personRegion, 0, (int)(height * 0.5), width, (int)(height * 0.5), 3);
-            var overallColors = await AnalyzeRegionAsync(personRegion, 0, 0, width, height, 5);
+            // Analyze different body regions in parallel for better performance
+            var analysisTask1 = AnalyzeRegionAsync(personRegion, 0, 0, width, (int)(height * 0.5), 3);
+            var analysisTask2 = AnalyzeRegionAsync(personRegion, 0, (int)(height * 0.5), width, (int)(height * 0.5), 3);
+            var analysisTask3 = AnalyzeRegionAsync(personRegion, 0, 0, width, height, 5);
+            
+            await Task.WhenAll(analysisTask1, analysisTask2, analysisTask3);
+            
+            var upperBodyColors = analysisTask1.Result;
+            var lowerBodyColors = analysisTask2.Result;
+            var overallColors = analysisTask3.Result;
 
             return new PersonColorProfile
             {
@@ -122,7 +128,12 @@ public class ColorAnalysisService : IColorAnalysisService
                     }
 
                     var current = colorHistogram[colorName];
-                    colorHistogram[colorName] = (current.count + 1, pixel);
+                    // Compute average RGB values
+                    var newCount = current.count + 1;
+                    var avgR = (byte)((current.avgRgb.R * current.count + pixel.R) / newCount);
+                    var avgG = (byte)((current.avgRgb.G * current.count + pixel.G) / newCount);
+                    var avgB = (byte)((current.avgRgb.B * current.count + pixel.B) / newCount);
+                    colorHistogram[colorName] = (newCount, new Rgb24(avgR, avgG, avgB));
                 }
             }
 

@@ -93,11 +93,13 @@ public class PersonTrackingService : IPersonTrackingService
                         
                         if (matchesColors && hasColorCriteria)
                         {
-                            // Add the specific colors that matched
-                            var detectedColorNames = colorProfile.OverallColors
+                            // Add the specific colors that matched from all regions (upper body, lower body, and overall)
+                            var allDetectedColorNames = colorProfile.UpperBodyColors
+                                .Concat(colorProfile.LowerBodyColors)
+                                .Concat(colorProfile.OverallColors)
                                 .Select(c => c.ColorName.ToLowerInvariant())
                                 .ToHashSet();
-                            matchedCriteria.AddRange(searchCriteria.Colors.Where(c => detectedColorNames.Contains(c.ToLowerInvariant())));
+                            matchedCriteria.AddRange(searchCriteria.Colors.Where(c => allDetectedColorNames.Contains(c.ToLowerInvariant())));
                         }
 
                         detectionResults.Add(new Detection
