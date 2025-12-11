@@ -1,0 +1,26 @@
+@ADCommsPersonTracking.Api_HostAddress = http://localhost:5205
+
+### Health Check
+GET {{ADCommsPersonTracking.Api_HostAddress}}/api/persontracking/health
+Accept: application/json
+
+###
+
+### Get Active Tracks
+GET {{ADCommsPersonTracking.Api_HostAddress}}/api/persontracking/tracks
+Accept: application/json
+
+###
+
+### Submit Tracking Request
+POST {{ADCommsPersonTracking.Api_HostAddress}}/api/persontracking/track
+Content-Type: application/json
+
+{
+  "cameraId": "train-cam-01",
+  "imageBase64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=",
+  "prompt": "find a person in a yellow jacket and black hat with a suitcase",
+  "timestamp": "2025-12-11T11:20:00Z"
+}
+
+###
