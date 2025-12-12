@@ -8,4 +8,6 @@ public interface IPersonTrackingApiService
     Task<TrackingResponse?> SubmitTrackingRequestAsync(TrackingRequest request);
     Task<List<PersonTrack>?> GetActiveTracksAsync();
     Task<PersonTrack?> GetTrackByIdAsync(string trackingId);
+    Task<VideoUploadResponse?> UploadVideoAsync(Stream videoStream, string fileName);
+    Task<TrackingResponse?> TrackByIdAsync(TrackByIdRequest request);
 }

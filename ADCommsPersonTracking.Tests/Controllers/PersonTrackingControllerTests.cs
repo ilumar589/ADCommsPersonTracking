@@ -13,13 +13,24 @@ namespace ADCommsPersonTracking.Tests.Controllers;
 public class PersonTrackingControllerTests
 {
     private readonly Mock<IPersonTrackingService> _trackingServiceMock;
+    private readonly Mock<IVideoProcessingService> _videoProcessingServiceMock;
+    private readonly Mock<IFrameStorageService> _frameStorageServiceMock;
+    private readonly Mock<IVideoCacheService> _videoCacheServiceMock;
     private readonly PersonTrackingController _controller;
 
     public PersonTrackingControllerTests()
     {
         _trackingServiceMock = new Mock<IPersonTrackingService>();
+        _videoProcessingServiceMock = new Mock<IVideoProcessingService>();
+        _frameStorageServiceMock = new Mock<IFrameStorageService>();
+        _videoCacheServiceMock = new Mock<IVideoCacheService>();
         var logger = Mock.Of<ILogger<PersonTrackingController>>();
-        _controller = new PersonTrackingController(_trackingServiceMock.Object, logger);
+        _controller = new PersonTrackingController(
+            _trackingServiceMock.Object, 
+            logger,
+            _videoProcessingServiceMock.Object,
+            _frameStorageServiceMock.Object,
+            _videoCacheServiceMock.Object);
     }
 
     [Fact]

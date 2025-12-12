@@ -1,0 +1,173 @@
+@page "/video-upload"
+@inject IPersonTrackingApiService ApiService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Video Upload - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Video Upload</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-3">Upload Video File</MudText>
+                
+                <MudFileUpload T="IBrowserFile" Accept="video/*" FilesChanged="HandleFileSelected" MaximumFileCount="1">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Primary" 
+                                   StartIcon="@Icons.Material.Filled.CloudUpload"
+                                   FullWidth="true"
+                                   Disabled="@_uploading">
+                            Select Video File
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+
+                @if (!string.IsNullOrEmpty(_fileName))
+                {
+                    <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Class="mt-2">@_fileName</MudChip>
+                }
+
+                @if (_uploading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">Processing video...</MudText>
+                }
+
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Upload"
+                           OnClick="UploadVideo"
+                           Disabled="@(_uploading || _selectedFile == null)"
+                           FullWidth="true"
+                           Class="mt-4">
+                    @if (_uploading)
+                    {
+                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                        <span>Uploading...</span>
+                    }
+                    else
+                    {
+                        <span>Upload and Process Video</span>
+                    }
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        @if (_uploadResponse != null)
+        {
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Upload Results</MudText>
+                    
+                    @if (_uploadResponse.WasCached)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-3">
+                            <MudText>@_uploadResponse.Message</MudText>
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mb-3">
+                            <MudText>@_uploadResponse.Message</MudText>
+                        </MudAlert>
+                    }
+
+                    <MudText Typo="Typo.body1" Class="mb-2">
+                        <strong>Tracking ID:</strong> @_uploadResponse.TrackingId
+                    </MudText>
+
+                    @if (_uploadResponse.FrameCount > 0)
+                    {
+                        <MudText Typo="Typo.body1" Class="mb-3">
+                            <strong>Frames Extracted:</strong> @_uploadResponse.FrameCount
+                        </MudText>
+                    }
+
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Secondary" 
+                               StartIcon="@Icons.Material.Filled.ArrowForward"
+                               OnClick="ProceedToTracking"
+                               FullWidth="true">
+                        Proceed to Tracking
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private IBrowserFile? _selectedFile;
+    private string _fileName = string.Empty;
+    private bool _uploading = false;
+    private VideoUploadResponse? _uploadResponse;
+
+    private void HandleFileSelected(IBrowserFile file)
+    {
+        _selectedFile = file;
+        _fileName = file?.Name ?? string.Empty;
+        _uploadResponse = null;
+        
+        if (file != null)
+        {
+            Snackbar.Add($"Video file '{_fileName}' selected", Severity.Success);
+        }
+    }
+
+    private async Task UploadVideo()
+    {
+        if (_selectedFile == null)
+        {
+            Snackbar.Add("Please select a video file", Severity.Warning);
+            return;
+        }
+
+        _uploading = true;
+        _uploadResponse = null;
+
+        try
+        {
+            const long maxFileSize = 500 * 1024 * 1024; // 500MB max
+            
+            using var stream = _selectedFile.OpenReadStream(maxFileSize);
+            _uploadResponse = await ApiService.UploadVideoAsync(stream, _selectedFile.Name);
+
+            if (_uploadResponse != null)
+            {
+                if (_uploadResponse.WasCached)
+                {
+                    Snackbar.Add("Video was already processed. Using cached result.", Severity.Info);
+                }
+                else
+                {
+                    Snackbar.Add($"Video processed successfully! Extracted {_uploadResponse.FrameCount} frames.", Severity.Success);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Failed to upload video", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error uploading video: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private void ProceedToTracking()
+    {
+        if (_uploadResponse != null)
+        {
+            NavigationManager.NavigateTo($"/track-submission?trackingId={_uploadResponse.TrackingId}");
+        }
+    }
+}
