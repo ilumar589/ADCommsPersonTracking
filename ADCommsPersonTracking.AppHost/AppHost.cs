@@ -23,16 +23,19 @@ var blobs = storage.AddBlobs("blobs");
 var redis = builder.AddRedis("redis");
 
 // Add API with model path configured via environment variable
+// Note: We don't wait for yoloModelExport because it's designed to exit after completing the export
+// The API will validate that the model file exists during startup instead
 var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersontracking-api")
     .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, yoloModel))
     .WithReference(blobs)
     .WithReference(redis)
-    .WaitFor(yoloModelExport)
     .WithExternalHttpEndpoints();
 
 // Add Web UI with reference to API
+// Wait for API to be ready before starting the Web UI
 builder.AddProject<Projects.ADCommsPersonTracking_Web>("adcommspersontracking-web")
     .WithReference(api)
+    .WaitFor(api)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();
