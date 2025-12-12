@@ -161,6 +161,175 @@ dotnet test --filter "Category=Integration"
 dotnet test
 ```
 
+## YOLO11 Model Export Docker Image
+
+When running the application with .NET Aspire, the YOLO11 model needs to be exported to ONNX format. This section provides detailed instructions for building and running the Docker image that handles this export process.
+
+### Prerequisites
+
+- **Docker Desktop** must be installed and running
+  - Download from: https://www.docker.com/products/docker-desktop/
+  - Verify installation: `docker --version`
+
+### Building and Running the Docker Image
+
+Follow these steps to build the Docker image and export the YOLO11 model:
+
+#### 1. Navigate to the Docker Directory
+
+```bash
+cd docker/yolo-model-export
+```
+
+#### 2. Build the Docker Image
+
+```bash
+docker build -t yolo-model-export:latest .
+```
+
+This creates a Docker image named `yolo-model-export:latest` that contains the YOLO11 export script.
+
+#### 3. Create the Models Directory
+
+```bash
+mkdir -p ../../models
+```
+
+This creates the `models/` directory in the repository root where the exported model will be saved.
+
+#### 4. Run the Container to Export the Model
+
+Run the appropriate command for your operating system to start the container with a volume mount.
+
+**Note:** These commands assume you are still in the `docker/yolo-model-export` directory from step 1. The relative paths `../../models` will mount the `models/` directory from the repository root.
+
+**Linux/macOS:**
+```bash
+docker run --rm -v "$(pwd)/../../models:/models" yolo-model-export:latest
+```
+
+**Windows PowerShell:**
+```powershell
+docker run --rm -v "${PWD}/../../models:/models" yolo-model-export:latest
+```
+
+**Windows Command Prompt:**
+```cmd
+docker run --rm -v "%cd%/../../models:/models" yolo-model-export:latest
+```
+
+#### 5. Verify the Model Was Created
+
+**Linux/macOS:**
+```bash
+ls -la ../../models/yolo11n.onnx
+```
+
+**Windows PowerShell:**
+```powershell
+Get-ChildItem ../../models/yolo11n.onnx
+```
+
+**Windows Command Prompt:**
+```cmd
+dir ..\..\models\yolo11n.onnx
+```
+
+You should see a file approximately 6MB in size.
+
+### What the Container Does
+
+The `yolo-model-export` container performs the following operations:
+
+1. **Downloads YOLO11n Pre-trained Weights** (~6MB) from Ultralytics if not already present
+2. **Exports to ONNX Format** using the Ultralytics library with optimizations:
+   - Simplified model structure
+   - Fixed input size (640x640)
+   - Static batch size for better performance
+3. **Saves to Models Directory** - The exported `yolo11n.onnx` file is saved to the `models/` directory through the volume mount
+4. **Exits Automatically** - The container completes and exits after the export is finished
+
+The entire process typically takes 1-2 minutes on the first run when downloading weights from the internet.
+
+### Running with .NET Aspire
+
+After building the Docker image and exporting the model, you can run the application with .NET Aspire:
+
+```bash
+# Navigate to the AppHost directory
+cd ../../ADCommsPersonTracking.AppHost
+
+# Run the Aspire orchestrator
+dotnet run
+```
+
+.NET Aspire will:
+- Start the Aspire Dashboard (opens automatically in your browser)
+- Launch the API service with the YOLO11 model
+- Launch the Blazor Web UI
+- Configure service discovery and health monitoring
+
+Access the services:
+- **Aspire Dashboard**: `http://localhost:15000` or `https://localhost:17000`
+- **API and Web UI**: Endpoints are shown in the Aspire Dashboard
+
+### Troubleshooting
+
+#### "Unable to find image 'yolo-model-export:latest' locally"
+
+**Error Message:**
+```
+Unable to find image 'yolo-model-export:latest' locally
+Error response from daemon: pull access denied for yolo-model-export, repository does not exist or may require 'docker login'
+```
+
+**Solution:** The Docker image needs to be built locally first. Follow the build instructions above:
+```bash
+cd docker/yolo-model-export
+docker build -t yolo-model-export:latest .
+```
+
+#### "Permission denied" When Mounting Volumes
+
+**Error Message:**
+```
+docker: Error response from daemon: error while creating mount source path: mkdir permission denied
+```
+
+**Solution:** 
+1. Open Docker Desktop settings
+2. Go to **Resources** > **File Sharing** (on Windows/Mac)
+3. Ensure the repository directory is in the list of shared paths
+4. Click **Apply & Restart**
+
+Alternatively, use an absolute path for the volume mount:
+```bash
+docker run --rm -v "/absolute/path/to/models:/models" yolo-model-export:latest
+```
+
+#### Model Export Takes Too Long
+
+**Issue:** The first run may take several minutes.
+
+**Explanation:** On the first run, the container downloads the YOLO11n pre-trained weights (~6MB) from the internet. Subsequent runs will be much faster if the model already exists.
+
+**Solution:** 
+- Ensure you have a stable internet connection
+- Wait for the download to complete (typically 1-2 minutes)
+- If the download fails, delete any partial files in the `models/` directory and try again
+
+#### Docker Daemon Not Running
+
+**Error Message:**
+```
+Cannot connect to the Docker daemon. Is the docker daemon running?
+```
+
+**Solution:**
+- Start Docker Desktop
+- Wait for Docker to fully start (check the system tray icon)
+- Verify with: `docker ps`
+
 ## API Usage
 
 ### 1. Track Persons in a Frame
