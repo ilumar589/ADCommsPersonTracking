@@ -49,18 +49,18 @@ public class VideoProcessingService : IVideoProcessingService
 
             if (!File.Exists(ffmpegExe) || !File.Exists(ffprobeExe))
             {
-                _logger.LogInformation("FFmpeg binaries not found. Downloading from official sources...");
+                _logger.LogInformation("FFmpeg binaries not found. Downloading version 6.1 from official sources...");
                 
                 // Download FFmpeg binaries (both FFMpeg and FFProbe)
-                // Note: Uses LatestAvailable from FFMpegCore.Extensions.Downloader's trusted sources
+                // Note: Pinned to V6_1 for security and consistency
                 var options = new FFOptions { BinaryFolder = ffmpegPath };
                 await FFMpegDownloader.DownloadBinaries(
-                    FFMpegVersions.LatestAvailable,
+                    FFMpegVersions.V6_1,
                     FFMpegBinaries.FFMpeg | FFMpegBinaries.FFProbe,
                     options
                 );
                 
-                _logger.LogInformation("FFmpeg binaries downloaded successfully to: {Path}", ffmpegPath);
+                _logger.LogInformation("FFmpeg binaries (v6.1) downloaded successfully to: {Path}", ffmpegPath);
             }
             else
             {
