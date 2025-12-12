@@ -1,6 +1,8 @@
 using ADCommsPersonTracking.Api.Models;
 using ADCommsPersonTracking.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ADCommsPersonTracking.Api.Controllers;
 
@@ -133,8 +135,8 @@ public class PersonTrackingController : ControllerBase
             using var stream = video.OpenReadStream();
             var frames = await _videoProcessingService.ExtractFramesAsync(stream, videoName);
 
-            // Generate tracking ID
-            var trackingId = $"video_{Guid.NewGuid():N}";
+            // Generate deterministic tracking ID based on video filename
+            var trackingId = GenerateDeterministicTrackingId(videoName);
 
             // Upload frames to blob storage
             await _frameStorageService.UploadFramesAsync(trackingId, frames);
@@ -253,5 +255,18 @@ public class PersonTrackingController : ControllerBase
     public IActionResult HealthCheck()
     {
         return Ok(new { status = "healthy", timestamp = DateTime.UtcNow });
+    }
+
+    /// <summary>
+    /// Generate a deterministic tracking ID based on the video filename.
+    /// Uses SHA256 hash to ensure the same video always gets the same tracking ID.
+    /// </summary>
+    /// <param name="videoName">The name of the video file</param>
+    /// <returns>A deterministic tracking ID in the format "video_{hash}"</returns>
+    private string GenerateDeterministicTrackingId(string videoName)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(videoName));
+        var hashString = Convert.ToHexString(hash).ToLowerInvariant()[..32];
+        return $"video_{hashString}";
     }
 }

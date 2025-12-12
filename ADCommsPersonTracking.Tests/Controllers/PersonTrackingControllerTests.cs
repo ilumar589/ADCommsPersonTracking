@@ -2,6 +2,7 @@ using ADCommsPersonTracking.Api.Controllers;
 using ADCommsPersonTracking.Api.Models;
 using ADCommsPersonTracking.Api.Services;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -270,6 +271,136 @@ public class PersonTrackingControllerTests
         result.Should().BeOfType<OkObjectResult>();
         var okResult = result as OkObjectResult;
         okResult!.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task UploadVideo_WithSameFilename_GeneratesSameTrackingId()
+    {
+        // Arrange
+        var videoName = "test_video.mp4";
+        var frames = new List<byte[]> { CreateTestImage(640, 480) };
+
+        _videoCacheServiceMock
+            .Setup(s => s.GetTrackingIdByVideoNameAsync(videoName))
+            .ReturnsAsync((string?)null);
+
+        _videoProcessingServiceMock
+            .Setup(s => s.ExtractFramesAsync(It.IsAny<Stream>(), videoName))
+            .ReturnsAsync(frames);
+
+        _frameStorageServiceMock
+            .Setup(s => s.UploadFramesAsync(It.IsAny<string>(), frames))
+            .ReturnsAsync("container-url");
+
+        _videoCacheServiceMock
+            .Setup(s => s.SetTrackingIdForVideoAsync(videoName, It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        var video1 = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
+        var video2 = CreateMockFormFile(videoName, "video/mp4", new byte[] { 4, 5, 6 });
+
+        // Act - Upload same filename twice
+        var result1 = await _controller.UploadVideo(video1);
+        var result2 = await _controller.UploadVideo(video2);
+
+        // Assert - Both should generate the same tracking ID
+        result1.Result.Should().BeOfType<OkObjectResult>();
+        result2.Result.Should().BeOfType<OkObjectResult>();
+
+        var response1 = (result1.Result as OkObjectResult)!.Value as VideoUploadResponse;
+        var response2 = (result2.Result as OkObjectResult)!.Value as VideoUploadResponse;
+
+        response1.Should().NotBeNull();
+        response2.Should().NotBeNull();
+        response1!.TrackingId.Should().Be(response2!.TrackingId);
+        response1.TrackingId.Should().StartWith("video_");
+    }
+
+    [Fact]
+    public async Task UploadVideo_WithDifferentFilenames_GeneratesDifferentTrackingIds()
+    {
+        // Arrange
+        var videoName1 = "test_video1.mp4";
+        var videoName2 = "test_video2.mp4";
+        var frames = new List<byte[]> { CreateTestImage(640, 480) };
+
+        _videoCacheServiceMock
+            .Setup(s => s.GetTrackingIdByVideoNameAsync(It.IsAny<string>()))
+            .ReturnsAsync((string?)null);
+
+        _videoProcessingServiceMock
+            .Setup(s => s.ExtractFramesAsync(It.IsAny<Stream>(), It.IsAny<string>()))
+            .ReturnsAsync(frames);
+
+        _frameStorageServiceMock
+            .Setup(s => s.UploadFramesAsync(It.IsAny<string>(), frames))
+            .ReturnsAsync("container-url");
+
+        _videoCacheServiceMock
+            .Setup(s => s.SetTrackingIdForVideoAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        var video1 = CreateMockFormFile(videoName1, "video/mp4", new byte[] { 1, 2, 3 });
+        var video2 = CreateMockFormFile(videoName2, "video/mp4", new byte[] { 4, 5, 6 });
+
+        // Act - Upload different filenames
+        var result1 = await _controller.UploadVideo(video1);
+        var result2 = await _controller.UploadVideo(video2);
+
+        // Assert - Should generate different tracking IDs
+        result1.Result.Should().BeOfType<OkObjectResult>();
+        result2.Result.Should().BeOfType<OkObjectResult>();
+
+        var response1 = (result1.Result as OkObjectResult)!.Value as VideoUploadResponse;
+        var response2 = (result2.Result as OkObjectResult)!.Value as VideoUploadResponse;
+
+        response1.Should().NotBeNull();
+        response2.Should().NotBeNull();
+        response1!.TrackingId.Should().NotBe(response2!.TrackingId);
+        response1.TrackingId.Should().StartWith("video_");
+        response2.TrackingId.Should().StartWith("video_");
+    }
+
+    [Fact]
+    public async Task UploadVideo_WithCachedVideo_ReturnsCachedTrackingId()
+    {
+        // Arrange
+        var videoName = "cached_video.mp4";
+        var cachedTrackingId = "video_cached123";
+
+        _videoCacheServiceMock
+            .Setup(s => s.GetTrackingIdByVideoNameAsync(videoName))
+            .ReturnsAsync(cachedTrackingId);
+
+        var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
+
+        // Act
+        var result = await _controller.UploadVideo(video);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var response = (result.Result as OkObjectResult)!.Value as VideoUploadResponse;
+        
+        response.Should().NotBeNull();
+        response!.TrackingId.Should().Be(cachedTrackingId);
+        response.WasCached.Should().BeTrue();
+        response.Message.Should().Contain("already processed");
+
+        // Verify that video processing was not called
+        _videoProcessingServiceMock.Verify(
+            s => s.ExtractFramesAsync(It.IsAny<Stream>(), It.IsAny<string>()), 
+            Times.Never);
+    }
+
+    private IFormFile CreateMockFormFile(string fileName, string contentType, byte[] content)
+    {
+        var stream = new MemoryStream(content);
+        var formFile = new Mock<IFormFile>();
+        formFile.Setup(f => f.FileName).Returns(fileName);
+        formFile.Setup(f => f.ContentType).Returns(contentType);
+        formFile.Setup(f => f.Length).Returns(content.Length);
+        formFile.Setup(f => f.OpenReadStream()).Returns(stream);
+        return formFile.Object;
     }
 
     private TrackingRequest CreateTestRequest()
