@@ -30,14 +30,18 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 ### Technology Stack
 
 - .NET 10
+- .NET Aspire 13 (Orchestration, Service Discovery, Observability)
 - ASP.NET Core Web API
+- Blazor WebAssembly UI
 - Microsoft.ML.OnnxRuntime (YOLO11)
 - SixLabors.ImageSharp (Image processing and annotation)
+- Docker (YOLO11 container via ultralytics/ultralytics)
 
 ## Prerequisites
 
 - .NET 10 SDK
-- YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants)
+- Docker Desktop (for running with Aspire and YOLO11 container)
+- YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants) - optional for standalone API mode
 
 ## Installation
 
@@ -85,6 +89,33 @@ Download from Ultralytics GitHub releases or HuggingFace:
 Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
 ### 3. Build and Run
+
+#### Option A: Run with .NET Aspire (Recommended)
+
+.NET Aspire orchestrates all services (API, Web UI, and YOLO11 Docker container) together with built-in observability, service discovery, and health checks.
+
+```bash
+# Ensure Docker is running for the YOLO11 container
+docker --version
+
+# Set the AppHost as the startup project and run
+cd ADCommsPersonTracking.AppHost
+dotnet run
+```
+
+This will:
+- Start the Aspire Dashboard (opens in browser automatically)
+- Launch the API service with health checks and telemetry
+- Launch the Blazor Web UI
+- Start the YOLO11 Docker container (ultralytics/ultralytics)
+- Configure automatic service discovery between components
+
+Access the services:
+- **Aspire Dashboard**: `http://localhost:15000` or `https://localhost:17000` (for monitoring all services)
+- **API**: Service discovery endpoint (viewable in Aspire Dashboard)
+- **Web UI**: Service discovery endpoint (viewable in Aspire Dashboard)
+
+#### Option B: Run Standalone (Without Aspire)
 
 ```bash
 cd ADCommsPersonTracking.Api
