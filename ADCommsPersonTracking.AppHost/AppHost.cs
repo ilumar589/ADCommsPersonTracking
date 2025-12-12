@@ -1,13 +1,20 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Add YOLO11 container using ultralytics image
-var yolo11 = builder.AddContainer("yolo11", "ultralytics/ultralytics")
-    .WithHttpEndpoint(port: 8000, targetPort: 8000, name: "http")
-    .WithArgs("yolo", "serve", "model=yolo11n.pt", "imgsz=640");
+// Read YOLO11 configuration from appsettings
+var yoloConfig = builder.Configuration.GetSection("Yolo11");
+var yoloImage = yoloConfig["Image"] ?? "ultralytics/ultralytics";
+var yoloModel = yoloConfig["Model"] ?? "yolo11n.pt";
+var yoloImageSize = yoloConfig["ImageSize"] ?? "640";
+var yoloPort = int.Parse(yoloConfig["Port"] ?? "8000");
 
-// Add API with reference to YOLO11
+// Add YOLO11 container using ultralytics image with configurable settings
+var yolo11 = builder.AddContainer("yolo11", yoloImage)
+    .WithHttpEndpoint(port: yoloPort, targetPort: yoloPort, name: "http")
+    .WithArgs("yolo", "serve", $"model={yoloModel}", $"imgsz={yoloImageSize}");
+
+// Add API with YOLO11 service discovery via connection string
 var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersontracking-api")
-    .WithReference(yolo11.GetEndpoint("http"))
+    .WithEnvironment("ConnectionStrings__yolo11", yolo11.GetEndpoint("http"))
     .WithExternalHttpEndpoints();
 
 // Add Web UI with reference to API
