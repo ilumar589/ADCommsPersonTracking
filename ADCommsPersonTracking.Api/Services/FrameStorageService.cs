@@ -143,7 +143,7 @@ public class FrameStorageService : IFrameStorageService
             {
                 // Extract tracking ID from blob name (format: trackingId/frame_xxxx.png)
                 var parts = blobItem.Name.Split('/');
-                if (parts.Length > 0)
+                if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
                 {
                     trackingIds.Add(parts[0]);
                 }
