@@ -1,4 +1,6 @@
 using FFMpegCore;
+using FFMpegCore.Extensions.Downloader;
+using FFMpegCore.Extensions.Downloader.Enums;
 
 namespace ADCommsPersonTracking.Api.Services;
 
@@ -6,6 +8,8 @@ public class VideoProcessingService : IVideoProcessingService
 {
     private readonly ILogger<VideoProcessingService> _logger;
     private readonly IConfiguration _configuration;
+    private static bool _ffmpegInitialized = false;
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
 
     public VideoProcessingService(ILogger<VideoProcessingService> logger, IConfiguration configuration)
     {
@@ -13,8 +17,74 @@ public class VideoProcessingService : IVideoProcessingService
         _configuration = configuration;
     }
 
+    private async Task EnsureFFmpegInstalledAsync()
+    {
+        if (_ffmpegInitialized)
+            return;
+
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_ffmpegInitialized)
+                return;
+
+            _logger.LogInformation("Checking FFmpeg installation...");
+            
+            // Get FFmpeg binaries path - use application data folder for storage
+            var ffmpegPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ADCommsPersonTracking",
+                "ffmpeg"
+            );
+
+            // Ensure directory exists
+            Directory.CreateDirectory(ffmpegPath);
+
+            // Check if FFmpeg binaries already exist
+            var ffmpegExe = Path.Combine(ffmpegPath, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+            var ffprobeExe = Path.Combine(ffmpegPath, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
+
+            if (!File.Exists(ffmpegExe) || !File.Exists(ffprobeExe))
+            {
+                _logger.LogInformation("FFmpeg binaries not found. Downloading...");
+                
+                // Download FFmpeg binaries (both FFMpeg and FFProbe)
+                var options = new FFOptions { BinaryFolder = ffmpegPath };
+                await FFMpegDownloader.DownloadBinaries(
+                    FFMpegVersions.LatestAvailable,
+                    FFMpegBinaries.FFMpeg | FFMpegBinaries.FFProbe,
+                    options
+                );
+                
+                _logger.LogInformation("FFmpeg binaries downloaded successfully to: {Path}", ffmpegPath);
+            }
+            else
+            {
+                _logger.LogInformation("FFmpeg binaries already present at: {Path}", ffmpegPath);
+            }
+
+            // Configure FFMpegCore to use the downloaded binaries
+            GlobalFFOptions.Configure(options => options.BinaryFolder = ffmpegPath);
+            
+            _ffmpegInitialized = true;
+            _logger.LogInformation("FFmpeg initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize FFmpeg");
+            throw new InvalidOperationException("Failed to initialize FFmpeg. Video processing is unavailable.", ex);
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
     public async Task<List<byte[]>> ExtractFramesAsync(Stream videoStream, string fileName)
     {
+        // Ensure FFmpeg is installed before processing
+        await EnsureFFmpegInstalledAsync();
+        
         var frames = new List<byte[]>();
         
         try
