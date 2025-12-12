@@ -1,0 +1,210 @@
+@page "/track-submission"
+@inject IPersonTrackingApiService ApiService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Track Submission - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Track Submission</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-3">Upload Image</MudText>
+                
+                <MudFileUpload T="IBrowserFile" Accept="image/*" FilesChanged="HandleFileSelected" MaximumFileCount="1">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Primary" 
+                                   StartIcon="@Icons.Material.Filled.CloudUpload"
+                                   FullWidth="true">
+                            Select Image
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+
+                @if (!string.IsNullOrEmpty(_fileName))
+                {
+                    <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Class="mt-2">@_fileName</MudChip>
+                }
+
+                @if (!string.IsNullOrEmpty(_imageBase64))
+                {
+                    <MudImage Src="@($"data:image/png;base64,{_imageBase64}")" 
+                              Alt="Uploaded image" 
+                              Class="mt-3" 
+                              Elevation="1" 
+                              ObjectFit="ObjectFit.Contain"
+                              Height="300" />
+                }
+
+                <MudTextField @bind-Value="_prompt" 
+                              Label="Search Prompt" 
+                              Variant="Variant.Outlined" 
+                              Lines="3"
+                              Class="mt-4"
+                              Placeholder="e.g., find a person in a yellow jacket and black hat with a suitcase"
+                              HelperText="Describe the person you want to track" />
+
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Search"
+                           OnClick="SubmitTracking"
+                           Disabled="@(_submitting || string.IsNullOrEmpty(_imageBase64) || string.IsNullOrEmpty(_prompt))"
+                           FullWidth="true"
+                           Class="mt-4">
+                    @if (_submitting)
+                    {
+                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <span>Submit Tracking Request</span>
+                    }
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        @if (_trackingResponse != null)
+        {
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Results</MudText>
+                    
+                    @if (!string.IsNullOrEmpty(_trackingResponse.ProcessingMessage))
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-3">@_trackingResponse.ProcessingMessage</MudAlert>
+                    }
+
+                    @foreach (var result in _trackingResponse.Results)
+                    {
+                        @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                        {
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
+                            <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
+                                      Alt="Annotated image" 
+                                      Elevation="1" 
+                                      Class="mb-3"
+                                      ObjectFit="ObjectFit.Contain"
+                                      Height="300" />
+                        }
+
+                        @if (result.Detections.Any())
+                        {
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Detections (@result.Detections.Count)</MudText>
+                            
+                            @foreach (var detection in result.Detections)
+                            {
+                                <MudCard Elevation="1" Class="mb-2">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                        <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                        <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                        <MudText Typo="Typo.body2">
+                                            Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                            [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                        </MudText>
+                                        @if (detection.MatchedCriteria.Any())
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
+                                            <MudChipSet T="string">
+                                                @foreach (var criteria in detection.MatchedCriteria)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
+                                                }
+                                            </MudChipSet>
+                                        }
+                                    </MudCardContent>
+                                </MudCard>
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning">No detections found matching the prompt.</MudAlert>
+                        }
+                    }
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _imageBase64 = string.Empty;
+    private string _fileName = string.Empty;
+    private string _prompt = string.Empty;
+    private bool _submitting = false;
+    private TrackingResponse? _trackingResponse;
+
+    private async Task HandleFileSelected(IBrowserFile file)
+    {
+        if (file != null)
+        {
+            _fileName = file.Name;
+            
+            const int maxFileSize = 10 * 1024 * 1024; // 10MB
+            
+            try
+            {
+                using var stream = file.OpenReadStream(maxFileSize);
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                var bytes = memoryStream.ToArray();
+                _imageBase64 = Convert.ToBase64String(bytes);
+                
+                Snackbar.Add($"Image '{_fileName}' loaded successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading image: {ex.Message}", Severity.Error);
+                _imageBase64 = string.Empty;
+                _fileName = string.Empty;
+            }
+        }
+    }
+
+    private async Task SubmitTracking()
+    {
+        if (string.IsNullOrEmpty(_imageBase64) || string.IsNullOrEmpty(_prompt))
+        {
+            Snackbar.Add("Please upload an image and provide a search prompt", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        _trackingResponse = null;
+
+        try
+        {
+            var request = new TrackingRequest
+            {
+                ImagesBase64 = new List<string> { _imageBase64 },
+                Prompt = _prompt,
+                Timestamp = DateTime.UtcNow
+            };
+
+            _trackingResponse = await ApiService.SubmitTrackingRequestAsync(request);
+
+            if (_trackingResponse != null)
+            {
+                Snackbar.Add("Tracking request processed successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to process tracking request", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

@@ -1,0 +1,103 @@
+@page "/active-tracks"
+@inject IPersonTrackingApiService ApiService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Active Tracks - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Active Tracks</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (_tracks == null || !_tracks.Any())
+{
+    <MudAlert Severity="Severity.Info">No active tracks found.</MudAlert>
+}
+else
+{
+    <MudCard Elevation="2">
+        <MudCardContent>
+            <MudDataGrid T="PersonTrack" 
+                         Items="_tracks" 
+                         Filterable="true" 
+                         SortMode="SortMode.Multiple"
+                         Hover="true"
+                         RowClick="HandleRowClick"
+                         Dense="true">
+                <Columns>
+                    <PropertyColumn Property="x => x.TrackingId" Title="Tracking ID" />
+                    <PropertyColumn Property="x => x.FirstSeen" Title="First Seen" Format="g" />
+                    <PropertyColumn Property="x => x.LastSeen" Title="Last Seen" Format="g" />
+                    <PropertyColumn Property="x => x.Description" Title="Description" />
+                    <PropertyColumn Property="x => x.LastKnownPosition.Confidence" Title="Confidence" Format="P0" />
+                    <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+                        <CellTemplate>
+                            <MudTooltip Text="View Details">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                                              Size="Size.Small" 
+                                              Color="Color.Primary"
+                                              OnClick="@(() => ViewTrackDetails(context.Item.TrackingId))" />
+                            </MudTooltip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="PersonTrack" />
+                </PagerContent>
+            </MudDataGrid>
+        </MudCardContent>
+    </MudCard>
+}
+
+<MudButton Variant="Variant.Filled" 
+           Color="Color.Primary" 
+           StartIcon="@Icons.Material.Filled.Refresh"
+           OnClick="LoadTracksAsync"
+           Class="mt-4">
+    Refresh
+</MudButton>
+
+@code {
+    private bool _loading = true;
+    private List<PersonTrack>? _tracks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTracksAsync();
+    }
+
+    private async Task LoadTracksAsync()
+    {
+        _loading = true;
+        
+        try
+        {
+            _tracks = await ApiService.GetActiveTracksAsync();
+            
+            if (_tracks == null)
+            {
+                Snackbar.Add("Failed to load active tracks", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tracks: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void HandleRowClick(DataGridRowClickEventArgs<PersonTrack> args)
+    {
+        ViewTrackDetails(args.Item.TrackingId);
+    }
+
+    private void ViewTrackDetails(string trackingId)
+    {
+        NavigationManager.NavigateTo($"/track-details/{trackingId}");
+    }
+}
