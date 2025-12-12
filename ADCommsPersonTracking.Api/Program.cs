@@ -2,6 +2,9 @@ using ADCommsPersonTracking.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add service defaults (Aspire)
+builder.AddServiceDefaults();
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -26,6 +29,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Map default endpoints (Aspire)
+app.MapDefaultEndpoints();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())

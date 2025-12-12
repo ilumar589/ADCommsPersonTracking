@@ -12,8 +12,10 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped<IPersonTrackingApiService, PersonTrackingApiService>();
 builder.Services.AddHttpClient<IPersonTrackingApiService, PersonTrackingApiService>(client =>
 {
-    // Default to localhost:5000 for development, but this can be configured via appsettings.json
-    client.BaseAddress = new Uri("http://localhost:5000/");
+    // For Aspire, the base address will be set via configuration at runtime
+    // Fallback to localhost:5000 for standalone development
+    var apiBaseAddress = builder.Configuration["services:api:http:0"] ?? builder.Configuration["services:api:https:0"] ?? "http://localhost:5000";
+    client.BaseAddress = new Uri(apiBaseAddress);
 });
 
 // Add MudBlazor services

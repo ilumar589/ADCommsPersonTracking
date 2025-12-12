@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ADCommsPersonTracking.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ADCommsPersonTracking.Web", "ADCommsPersonTracking.Web\ADCommsPersonTracking.Web.csproj", "{88C15A93-6E4A-401E-A80F-53D219E97BCE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ADCommsPersonTracking.AppHost", "ADCommsPersonTracking.AppHost\ADCommsPersonTracking.AppHost.csproj", "{7D2EF897-530C-43F5-990D-BF48B215A754}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ADCommsPersonTracking.ServiceDefaults", "ADCommsPersonTracking.ServiceDefaults\ADCommsPersonTracking.ServiceDefaults.csproj", "{DAB2145F-E73B-4C80-A801-1389B77897F2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +59,30 @@ Global
 		{88C15A93-6E4A-401E-A80F-53D219E97BCE}.Release|x64.Build.0 = Release|Any CPU
 		{88C15A93-6E4A-401E-A80F-53D219E97BCE}.Release|x86.ActiveCfg = Release|Any CPU
 		{88C15A93-6E4A-401E-A80F-53D219E97BCE}.Release|x86.Build.0 = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|x64.Build.0 = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Debug|x86.Build.0 = Debug|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|x64.ActiveCfg = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|x64.Build.0 = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|x86.ActiveCfg = Release|Any CPU
+		{7D2EF897-530C-43F5-990D-BF48B215A754}.Release|x86.Build.0 = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|x64.Build.0 = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Debug|x86.Build.0 = Debug|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|x64.ActiveCfg = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|x64.Build.0 = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|x86.ActiveCfg = Release|Any CPU
+		{DAB2145F-E73B-4C80-A801-1389B77897F2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
