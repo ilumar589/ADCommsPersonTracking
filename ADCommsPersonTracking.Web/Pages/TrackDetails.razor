@@ -1,0 +1,215 @@
+@page "/track-details/{TrackingId}"
+@inject IPersonTrackingApiService ApiService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Track Details - ADComms Person Tracking</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="mb-4"></MudBreadcrumbs>
+
+@if (_loading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (_track == null)
+{
+    <MudAlert Severity="Severity.Error">Track not found.</MudAlert>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/active-tracks" Class="mt-4">
+        Back to Active Tracks
+    </MudButton>
+}
+else
+{
+    <MudText Typo="Typo.h3" Class="mb-4">Track Details</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Track Information</MudText>
+                    
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <tbody>
+                            <tr>
+                                <td><strong>Tracking ID</strong></td>
+                                <td>@_track.TrackingId</td>
+                            </tr>
+                            <tr>
+                                <td><strong>First Seen</strong></td>
+                                <td>@_track.FirstSeen.ToLocalTime().ToString("g")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Last Seen</strong></td>
+                                <td>@_track.LastSeen.ToLocalTime().ToString("g")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Duration</strong></td>
+                                <td>@GetDuration(_track.FirstSeen, _track.LastSeen)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Description</strong></td>
+                                <td>@_track.Description</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Last Known Position</MudText>
+                    
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <tbody>
+                            <tr>
+                                <td><strong>X</strong></td>
+                                <td>@_track.LastKnownPosition.X.ToString("F2")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Y</strong></td>
+                                <td>@_track.LastKnownPosition.Y.ToString("F2")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Width</strong></td>
+                                <td>@_track.LastKnownPosition.Width.ToString("F2")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Height</strong></td>
+                                <td>@_track.LastKnownPosition.Height.ToString("F2")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Confidence</strong></td>
+                                <td>@_track.LastKnownPosition.Confidence.ToString("P0")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Label</strong></td>
+                                <td>@_track.LastKnownPosition.Label</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @if (_track.Features.Any())
+        {
+            <MudItem xs="12">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-3">Features</MudText>
+                        
+                        <MudChipSet T="string">
+                            @foreach (var feature in _track.Features)
+                            {
+                                <MudChip T="string" Color="Color.Primary" Icon="@Icons.Material.Filled.Label">@feature</MudChip>
+                            }
+                        </MudChipSet>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+
+        <MudItem xs="12">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Bounding Box Visualization</MudText>
+                    
+                    <MudPaper Elevation="1" Class="pa-4" Style="position: relative; width: 640px; height: 480px; background-color: #1a1a1a;">
+                        <div style="@GetBoundingBoxStyle()" title="Bounding Box">
+                            <MudText Typo="Typo.caption" Style="color: white; background-color: rgba(0,0,0,0.7); padding: 2px 6px;">
+                                @_track.TrackingId
+                            </MudText>
+                        </div>
+                    </MudPaper>
+                    
+                    <MudText Typo="Typo.caption" Class="mt-2">
+                        Red box represents the last known position of the tracked person (visualization scaled to 640x480)
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudButton Variant="Variant.Filled" 
+               Color="Color.Primary" 
+               Href="/active-tracks" 
+               StartIcon="@Icons.Material.Filled.ArrowBack"
+               Class="mt-4">
+        Back to Active Tracks
+    </MudButton>
+}
+
+@code {
+    [Parameter]
+    public string TrackingId { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private PersonTrack? _track;
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Dashboard", href: "/"),
+            new BreadcrumbItem("Active Tracks", href: "/active-tracks"),
+            new BreadcrumbItem("Track Details", href: null, disabled: true)
+        };
+
+        await LoadTrackAsync();
+    }
+
+    private async Task LoadTrackAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            _track = await ApiService.GetTrackByIdAsync(TrackingId);
+
+            if (_track == null)
+            {
+                Snackbar.Add($"Track '{TrackingId}' not found", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading track: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string GetDuration(DateTime firstSeen, DateTime lastSeen)
+    {
+        var duration = lastSeen - firstSeen;
+        
+        if (duration.TotalDays >= 1)
+            return $"{duration.TotalDays:F1} days";
+        else if (duration.TotalHours >= 1)
+            return $"{duration.TotalHours:F1} hours";
+        else if (duration.TotalMinutes >= 1)
+            return $"{duration.TotalMinutes:F1} minutes";
+        else
+            return $"{duration.TotalSeconds:F0} seconds";
+    }
+
+    private string GetBoundingBoxStyle()
+    {
+        if (_track == null) return string.Empty;
+
+        var bbox = _track.LastKnownPosition;
+        
+        return $"position: absolute; " +
+               $"left: {bbox.X}px; " +
+               $"top: {bbox.Y}px; " +
+               $"width: {bbox.Width}px; " +
+               $"height: {bbox.Height}px; " +
+               $"border: 3px solid #ff0000; " +
+               $"box-sizing: border-box;";
+    }
+}

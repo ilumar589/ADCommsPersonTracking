@@ -1,0 +1,101 @@
+﻿@page "/"
+@inject IPersonTrackingApiService ApiService
+
+<PageTitle>Dashboard - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Dashboard</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">System Status</MudText>
+                    <MudDivider Class="my-2" />
+                    @if (_healthResponse != null)
+                    {
+                        <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">@_healthResponse.Status</MudChip>
+                        <MudText Typo="Typo.body2" Class="mt-2">Last Check: @_healthResponse.Timestamp.ToLocalTime().ToString("g")</MudText>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Error">Offline</MudChip>
+                        <MudText Typo="Typo.body2" Class="mt-2">Unable to connect to API</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Active Tracks</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.h4">@(_activeTracks?.Count ?? 0)</MudText>
+                    <MudText Typo="Typo.body2">Currently tracked persons</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/active-tracks" Color="Color.Primary" Variant="Variant.Text">View All</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Quick Actions</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudStack Spacing="2">
+                        <MudButton Href="/track-submission" Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Search" FullWidth="true">
+                            New Track Request
+                        </MudButton>
+                        <MudButton Href="/active-tracks" Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.List" FullWidth="true">
+                            View Active Tracks
+                        </MudButton>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-4">About</MudText>
+                    <MudText Typo="Typo.body1">
+                        The ADComms Person Tracking System uses advanced AI to detect and track persons in video frames based on natural language descriptions.
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mt-2">
+                        Upload images, provide a search prompt (e.g., "find a person in a yellow jacket and black hat with a suitcase"), 
+                        and the system will identify matching individuals with bounding boxes and tracking IDs.
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private HealthResponse? _healthResponse;
+    private List<PersonTrack>? _activeTracks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        
+        _healthResponse = await ApiService.GetHealthAsync();
+        _activeTracks = await ApiService.GetActiveTracksAsync();
+        
+        _loading = false;
+    }
+}
