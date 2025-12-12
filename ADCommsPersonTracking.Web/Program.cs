@@ -10,7 +10,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container
 builder.Services.AddRazorComponents()
-    .AddInteractiveWebAssemblyComponents();
+    .AddInteractiveServerComponents();
 
 // Configure HttpClient for API calls with Aspire service discovery
 builder.Services.AddScoped<IPersonTrackingApiService, PersonTrackingApiService>();
@@ -31,11 +31,7 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 
 // Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseWebAssemblyDebugging();
-}
-else
+if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
@@ -47,7 +43,6 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveWebAssemblyRenderMode()
-    .AddAdditionalAssemblies(typeof(ADCommsPersonTracking.Web._Imports).Assembly);
+    .AddInteractiveServerRenderMode();
 
 app.Run();
