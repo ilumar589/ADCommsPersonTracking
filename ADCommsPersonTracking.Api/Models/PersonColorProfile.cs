@@ -7,9 +7,4 @@ public class PersonColorProfile
     public List<DetectedColor> OverallColors { get; set; } = new();
 }
 
-public class DetectedColor
-{
-    public string ColorName { get; set; } = string.Empty;
-    public float Confidence { get; set; }
-    public string HexValue { get; set; } = string.Empty;
-}
+public readonly record struct DetectedColor(string ColorName, float Confidence, string HexValue);

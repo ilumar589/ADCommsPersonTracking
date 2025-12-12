@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -47,12 +48,12 @@ public class ImageAnnotationService : IImageAnnotationService
             var annotatedBytes = memoryStream.ToArray();
             var base64 = Convert.ToBase64String(annotatedBytes);
 
-            _logger.LogDebug("Annotated image with {Count} bounding boxes", boundingBoxes.Count);
+            _logger.LogAnnotatedImage(boundingBoxes.Count);
             return base64;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error annotating image");
+            _logger.LogAnnotationError(ex);
             throw;
         }
     }
@@ -118,7 +119,7 @@ public class ImageAnnotationService : IImageAnnotationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not draw label, fonts may not be available");
+            _logger.LogLabelDrawWarning(ex);
             // Continue without labels if font rendering fails
         }
     }
@@ -141,7 +142,7 @@ public class ImageAnnotationService : IImageAnnotationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not parse color {Hex}, using default green", hex);
+            _logger.LogColorParseWarning(hex, ex);
         }
 
         // Default to green

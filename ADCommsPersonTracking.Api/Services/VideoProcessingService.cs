@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using FFMpegCore;
 using FFMpegCore.Extensions.Downloader;
 using FFMpegCore.Extensions.Downloader.Enums;
@@ -30,7 +31,7 @@ public class VideoProcessingService : IVideoProcessingService
             if (_ffmpegInitialized)
                 return;
 
-            _logger.LogInformation("Checking FFmpeg installation...");
+            _logger.LogCheckingFFmpeg();
             
             // Get FFmpeg binaries path - use application data folder for storage
             var ffmpegPath = Path.Combine(
@@ -41,7 +42,7 @@ public class VideoProcessingService : IVideoProcessingService
 
             // Ensure directory exists (will throw if no permissions, caught by outer try-catch)
             Directory.CreateDirectory(ffmpegPath);
-            _logger.LogDebug("FFmpeg directory: {Path}", ffmpegPath);
+            _logger.LogFFmpegDirectory(ffmpegPath);
 
             // Check if FFmpeg binaries already exist
             var ffmpegExe = Path.Combine(ffmpegPath, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
@@ -49,7 +50,7 @@ public class VideoProcessingService : IVideoProcessingService
 
             if (!File.Exists(ffmpegExe) || !File.Exists(ffprobeExe))
             {
-                _logger.LogInformation("FFmpeg binaries not found. Downloading version 6.1 from official sources...");
+                _logger.LogFFmpegDownloading();
                 
                 // Download FFmpeg binaries (both FFMpeg and FFProbe)
                 // Note: Pinned to V6_1 for security and consistency
@@ -60,22 +61,22 @@ public class VideoProcessingService : IVideoProcessingService
                     options
                 );
                 
-                _logger.LogInformation("FFmpeg binaries (v6.1) downloaded successfully to: {Path}", ffmpegPath);
+                _logger.LogFFmpegDownloaded(ffmpegPath);
             }
             else
             {
-                _logger.LogInformation("FFmpeg binaries already present at: {Path}", ffmpegPath);
+                _logger.LogFFmpegPresent(ffmpegPath);
             }
 
             // Configure FFMpegCore to use the downloaded binaries
             GlobalFFOptions.Configure(options => options.BinaryFolder = ffmpegPath);
             
             _ffmpegInitialized = true;
-            _logger.LogInformation("FFmpeg initialized successfully");
+            _logger.LogFFmpegInitialized();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize FFmpeg");
+            _logger.LogFFmpegInitializationError(ex);
             throw new InvalidOperationException("Failed to initialize FFmpeg. Video processing is unavailable.", ex);
         }
         finally
@@ -106,22 +107,20 @@ public class VideoProcessingService : IVideoProcessingService
                     await videoStream.CopyToAsync(fileStream);
                 }
 
-                _logger.LogInformation("Processing video: {FileName}, Max frames: {MaxFrames}, Interval: {Interval}", 
-                    fileName, maxFrames, frameInterval);
+                _logger.LogProcessingVideo(fileName, maxFrames, frameInterval);
 
                 // Get video info
                 var videoInfo = await FFMpegCore.FFProbe.AnalyseAsync(tempVideoPath);
                 var duration = videoInfo.Duration;
                 var frameRate = videoInfo.PrimaryVideoStream?.FrameRate ?? 30;
                 
-                _logger.LogInformation("Video duration: {Duration}, Frame rate: {FrameRate}", duration, frameRate);
+                _logger.LogVideoInfo(duration, frameRate);
 
                 // Calculate how many frames to extract
                 var totalFrames = (int)(duration.TotalSeconds * frameRate);
                 var framesToExtract = Math.Min(maxFrames, totalFrames / frameInterval);
                 
-                _logger.LogInformation("Total frames in video: {TotalFrames}, Extracting: {FramesToExtract}", 
-                    totalFrames, framesToExtract);
+                _logger.LogFrameExtraction(totalFrames, framesToExtract);
 
                 // Extract frames at intervals
                 for (int i = 0; i < framesToExtract; i++)
@@ -140,7 +139,7 @@ public class VideoProcessingService : IVideoProcessingService
                         var frameBytes = await File.ReadAllBytesAsync(tempFramePath);
                         frames.Add(frameBytes);
                         
-                        _logger.LogDebug("Extracted frame {FrameNumber} at {TimeOffset}", i + 1, timeOffset);
+                        _logger.LogExtractedFrame(i + 1, timeOffset);
                     }
                     finally
                     {
@@ -152,8 +151,7 @@ public class VideoProcessingService : IVideoProcessingService
                     }
                 }
 
-                _logger.LogInformation("Successfully extracted {FrameCount} frames from video {FileName}", 
-                    frames.Count, fileName);
+                _logger.LogFramesExtracted(frames.Count, fileName);
             }
             finally
             {
@@ -166,7 +164,7 @@ public class VideoProcessingService : IVideoProcessingService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error extracting frames from video {FileName}", fileName);
+            _logger.LogFrameExtractionError(fileName, ex);
             throw;
         }
 

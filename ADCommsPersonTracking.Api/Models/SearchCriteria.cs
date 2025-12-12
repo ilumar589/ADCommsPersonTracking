@@ -9,8 +9,4 @@ public class SearchCriteria
     public List<string> PhysicalAttributes { get; set; } = new();
 }
 
-public class HeightInfo
-{
-    public float Meters { get; set; }
-    public string OriginalText { get; set; } = string.Empty;
-}
+public readonly record struct HeightInfo(float Meters, string OriginalText);

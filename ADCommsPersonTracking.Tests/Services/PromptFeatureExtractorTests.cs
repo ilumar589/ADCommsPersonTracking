@@ -88,7 +88,7 @@ public class PromptFeatureExtractorTests
 
         // Assert
         result.Height.Should().NotBeNull();
-        result.Height!.Meters.Should().BeApproximately(1.73f, 0.01f);
+        result.Height.Value.Meters.Should().BeApproximately(1.73f, 0.01f);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class PromptFeatureExtractorTests
 
         // Assert
         result.Height.Should().NotBeNull();
-        result.Height!.Meters.Should().BeApproximately(1.73f, 0.01f);
+        result.Height.Value.Meters.Should().BeApproximately(1.73f, 0.01f);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class PromptFeatureExtractorTests
 
         // Assert
         result.Height.Should().NotBeNull();
-        result.Height!.Meters.Should().BeApproximately(1.727f, 0.01f);
+        result.Height.Value.Meters.Should().BeApproximately(1.727f, 0.01f);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class PromptFeatureExtractorTests
         result.PhysicalAttributes.Should().Contain("tall");
         result.PhysicalAttributes.Should().Contain("slim");
         result.Height.Should().NotBeNull();
-        result.Height!.Meters.Should().BeApproximately(1.73f, 0.01f);
+        result.Height.Value.Meters.Should().BeApproximately(1.73f, 0.01f);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class PromptFeatureExtractorTests
 
         // Assert
         result.Height.Should().NotBeNull();
-        result.Height!.Meters.Should().BeApproximately(expectedMeters, 0.01f);
+        result.Height.Value.Meters.Should().BeApproximately(expectedMeters, 0.01f);
     }
 
     [Fact]
