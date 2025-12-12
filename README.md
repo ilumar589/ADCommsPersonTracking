@@ -42,6 +42,7 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 - .NET 10 SDK
 - Docker Desktop (for running with Aspire and YOLO11 container)
 - YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants) - optional for standalone API mode
+- **FFmpeg binaries are automatically downloaded** on first video upload (no manual installation required)
 
 ## Installation
 
