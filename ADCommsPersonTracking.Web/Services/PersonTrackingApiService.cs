@@ -67,4 +67,39 @@ public class PersonTrackingApiService : IPersonTrackingApiService
             return null;
         }
     }
+
+    public async Task<VideoUploadResponse?> UploadVideoAsync(Stream videoStream, string fileName)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(videoStream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("video/mp4");
+            content.Add(streamContent, "video", fileName);
+
+            var response = await _httpClient.PostAsync("api/persontracking/video/upload", content);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<VideoUploadResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading video: {FileName}", fileName);
+            return null;
+        }
+    }
+
+    public async Task<TrackingResponse?> TrackByIdAsync(TrackByIdRequest request)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/persontracking/track-by-id", request);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<TrackingResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting track-by-id request: {TrackingId}", request.TrackingId);
+            return null;
+        }
+    }
 }
