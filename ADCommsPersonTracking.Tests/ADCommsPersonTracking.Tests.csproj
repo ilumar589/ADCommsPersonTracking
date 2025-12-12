@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ADCommsPersonTracking.Api\ADCommsPersonTracking.Api.csproj" />
+    <ProjectReference Include="..\ADCommsPersonTracking.Web\ADCommsPersonTracking.Web.csproj" />
   </ItemGroup>
 
 </Project>
