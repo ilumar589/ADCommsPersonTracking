@@ -33,15 +33,14 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 - .NET Aspire 13 (Orchestration, Service Discovery, Observability)
 - ASP.NET Core Web API
 - Blazor WebAssembly UI
-- Microsoft.ML.OnnxRuntime (YOLO11)
+- Microsoft.ML.OnnxRuntime (YOLO11 local inference)
 - SixLabors.ImageSharp (Image processing and annotation)
-- Docker (YOLO11 container via ultralytics/ultralytics)
 
 ## Prerequisites
 
 - .NET 10 SDK
-- Docker Desktop (for running with Aspire and YOLO11 container)
-- YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants) - optional for standalone API mode
+- Docker Desktop (for running with Aspire)
+- YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants) - required for person detection
 - **FFmpeg binaries are automatically downloaded** on first video upload (no manual installation required)
 
 ## Installation
@@ -93,10 +92,10 @@ Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
 #### Option A: Run with .NET Aspire (Recommended)
 
-.NET Aspire orchestrates all services (API, Web UI, and YOLO11 model export container) together with built-in observability, service discovery, and health checks.
+.NET Aspire orchestrates all services (API and Web UI) together with built-in observability, service discovery, and health checks.
 
 ```bash
-# Ensure Docker is running for the YOLO11 model export container
+# Ensure Docker is running for Aspire infrastructure (Redis, Azure Storage Emulator)
 docker --version
 
 # Build the YOLO model export Docker image

@@ -4,10 +4,11 @@ This document describes the .NET Aspire setup for the ADComms Person Tracking Sy
 
 ## Overview
 
-The solution uses .NET Aspire 13 to orchestrate three main components:
+The solution uses .NET Aspire 13 to orchestrate two main components:
 1. **ADCommsPersonTracking.Api** - ASP.NET Core Web API for person detection and tracking
 2. **ADCommsPersonTracking.Web** - Blazor Web App with Interactive Server rendering for visualization
-3. **YOLO11 Container** - Docker container running the ultralytics/ultralytics image for object detection
+
+Additionally, Aspire manages infrastructure services including Azure Storage emulator (Azurite), Redis cache, and a one-time YOLO model export container.
 
 ## Project Structure
 
@@ -61,15 +62,14 @@ The ServiceDefaults project (`ADCommsPersonTracking.ServiceDefaults`) provides s
 - Enables automatic service endpoint resolution
 - Configures HTTP clients to use service discovery by default
 
-### YOLO11 Docker Container
+### YOLO Model Export Container
 
-The YOLO11 container configuration:
-- **Image**: `ultralytics/ultralytics`
-- **Port**: 8000 (HTTP endpoint for YOLO inference API)
-- **Command**: `yolo serve model=yolo11n.pt imgsz=640`
-- **Purpose**: Provides object detection capabilities via REST API
+The YOLO model export container configuration:
+- **Image**: `yolo-model-export` (custom built image)
+- **Purpose**: One-time export of YOLO11 model to ONNX format
+- **Operation**: Runs once, exports the model to the shared `models/` directory, then exits
 
-The container is automatically started when the AppHost runs and is accessible to the API service via service discovery.
+The API service uses local ONNX Runtime for inference, loading the model from the shared volume.
 
 ## Running the Application
 
@@ -104,10 +104,11 @@ The container is automatically started when the AppHost runs and is accessible t
 ### What Happens When You Run
 
 1. **Aspire Dashboard starts**: A web-based dashboard for monitoring all services
-2. **YOLO11 container launches**: Docker pulls and starts the ultralytics/ultralytics image
-3. **API service starts**: The ASP.NET Core API with health checks and telemetry
-4. **Web UI starts**: The Blazor WebAssembly application
-5. **Service discovery configures endpoints**: All services can communicate via named endpoints
+2. **Infrastructure services launch**: Redis cache and Azure Storage emulator (Azurite) start
+3. **YOLO model export container**: Runs once to export the YOLO11 model to ONNX format, then exits
+4. **API service starts**: The ASP.NET Core API with health checks and telemetry, using local ONNX inference
+5. **Web UI starts**: The Blazor Web App with Interactive Server rendering
+6. **Service discovery configures endpoints**: All services can communicate via named endpoints
 
 ## Aspire Dashboard Features
 
@@ -141,14 +142,14 @@ The Aspire Dashboard provides:
 
 ## Service Communication
 
-### API → YOLO11 Container
+### API → ONNX Model
 
-The API service receives the YOLO11 endpoint via environment variable:
+The API service receives the model path via environment variable:
 ```
-services__yolo11__http__0 = http://yolo11:8000
+ObjectDetection__ModelPath = /path/to/models/yolo11n.onnx
 ```
 
-The API can then make HTTP requests to `http://yolo11:8000` for object detection.
+The API loads the ONNX model and performs local inference using ONNX Runtime.
 
 ### Web UI → API
 
@@ -183,15 +184,15 @@ Key extension methods:
 
 ## Troubleshooting
 
-### Docker Container Not Starting
+### Model Export Container Not Starting
 
-**Problem**: YOLO11 container fails to start
+**Problem**: YOLO model export container fails to start or complete
 
 **Solutions**:
 1. Ensure Docker Desktop is running
-2. Check if port 8000 is available
-3. Pull the image manually: `docker pull ultralytics/ultralytics`
-4. Check Aspire Dashboard logs for error messages
+2. Build the export image: `cd docker/yolo-model-export && docker build -t yolo-model-export .`
+3. Check Aspire Dashboard logs for error messages
+4. Verify the `models/` directory is created and accessible
 
 ### Service Discovery Not Working
 
@@ -224,23 +225,16 @@ Key extension methods:
 
 ## Advanced Configuration
 
-### Custom Ports
-
-To change the YOLO11 container port, modify `AppHost/Program.cs`:
-
-```csharp
-var yolo11 = builder.AddContainer("yolo11", "ultralytics/ultralytics")
-    .WithHttpEndpoint(port: 9000, targetPort: 9000, name: "http")  // Changed from 8000
-    .WithArgs("yolo", "serve", "model=yolo11n.pt", "imgsz=640");
-```
-
 ### Different YOLO Model
 
-To use a different YOLO11 model size, update the `model` argument:
+To use a different YOLO11 model size, update the model export script to export a different model variant (yolo11s, yolo11m, yolo11l, or yolo11x), then update the `ModelPath` configuration in `appsettings.json`:
 
-```csharp
-.WithArgs("yolo", "serve", "model=yolo11s.pt", "imgsz=640")  // Small model
-.WithArgs("yolo", "serve", "model=yolo11m.pt", "imgsz=640")  // Medium model
+```json
+{
+  "ObjectDetection": {
+    "ModelPath": "models/yolo11s.onnx"
+  }
+}
 ```
 
 ### Environment-Specific Configuration
@@ -284,8 +278,10 @@ dotnet run
 cd ADCommsPersonTracking.Web
 dotnet run
 
-# Terminal 3: Start YOLO11
-docker run -p 8000:8000 ultralytics/ultralytics yolo serve
+# Terminal 3: Export YOLO model (one-time)
+cd docker/yolo-model-export
+docker build -t yolo-model-export .
+docker run --rm -v "$(pwd)/../../models:/models" yolo-model-export:latest
 ```
 
 ### After (Aspire)
@@ -295,7 +291,7 @@ cd ADCommsPersonTracking.AppHost
 dotnet run
 ```
 
-All services start automatically and communicate via service discovery!
+All services start automatically, the model is exported if needed, and services communicate via service discovery!
 
 ## Additional Resources
 
