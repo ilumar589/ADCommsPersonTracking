@@ -239,24 +239,12 @@ var controller = new PersonTrackingController(
 ## Dependencies
 
 - **FFMpegCore**: Video frame extraction
+- **FFMpegCore.Extensions.Downloader**: Automatic FFmpeg binary download
 - **Aspire.Azure.Storage.Blobs**: Blob storage client
 - **Aspire.StackExchange.Redis.DistributedCaching**: Redis caching
-- **FFmpeg**: System dependency (must be installed)
+- **FFmpeg**: Automatically downloaded on first video upload (no manual installation required)
 
-### Installing FFmpeg
-
-**Ubuntu/Debian**:
-```bash
-sudo apt-get install ffmpeg
-```
-
-**macOS**:
-```bash
-brew install ffmpeg
-```
-
-**Windows**:
-Download from https://ffmpeg.org/download.html
+> **Note**: FFmpeg binaries are automatically downloaded to the user's local application data folder on first video upload. The download happens once and the binaries are cached for subsequent use.
 
 ## Security
 

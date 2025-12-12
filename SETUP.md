@@ -6,6 +6,7 @@
 
 - .NET 10 SDK installed
 - Python 3.8+ with pip (for YOLO11 model export)
+- **Note:** FFmpeg binaries are automatically downloaded on first video upload
 
 ### 2. Install Ultralytics YOLO (for model export)
 
