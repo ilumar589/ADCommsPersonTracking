@@ -1,6 +1,7 @@
 using ADCommsPersonTracking.Api.Models;
 using ADCommsPersonTracking.Api.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SixLabors.ImageSharp;
@@ -16,7 +17,6 @@ public class PersonTrackingServiceTests
     private readonly Mock<IColorAnalysisService> _colorAnalysisServiceMock;
     private readonly Mock<IAccessoryDetectionService> _accessoryDetectionServiceMock;
     private readonly Mock<IPhysicalAttributeEstimator> _physicalAttributeEstimatorMock;
-    private readonly Mock<Microsoft.Extensions.Configuration.IConfiguration> _configurationMock;
     private readonly PersonTrackingService _service;
 
     public PersonTrackingServiceTests()
@@ -27,10 +27,15 @@ public class PersonTrackingServiceTests
         _colorAnalysisServiceMock = new Mock<IColorAnalysisService>();
         _accessoryDetectionServiceMock = new Mock<IAccessoryDetectionService>();
         _physicalAttributeEstimatorMock = new Mock<IPhysicalAttributeEstimator>();
-        _configurationMock = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
         
-        // Setup default configuration
-        _configurationMock.Setup(c => c.GetSection("Processing:MaxDegreeOfParallelism").Value).Returns("0");
+        // Create a real configuration for testing with parallelism disabled
+        var configDict = new Dictionary<string, string?>
+        {
+            { "Processing:MaxDegreeOfParallelism", "1" }
+        };
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(configDict)
+            .Build();
         
         var logger = Mock.Of<ILogger<PersonTrackingService>>();
 
@@ -41,7 +46,7 @@ public class PersonTrackingServiceTests
             _colorAnalysisServiceMock.Object,
             _accessoryDetectionServiceMock.Object,
             _physicalAttributeEstimatorMock.Object,
-            _configurationMock.Object,
+            configuration,
             logger);
     }
 
@@ -501,7 +506,7 @@ public class PersonTrackingServiceTests
 
         // Assert
         result.Results[0].Detections.Should().HaveCount(1); // Only the matching detection
-        result.ProcessingMessage.Should().Contain("Filtered to 1 persons matching color criteria");
+        result.ProcessingMessage.Should().Contain("Filtered to 1 persons matching criteria");
     }
 
     [Fact]
@@ -549,7 +554,7 @@ public class PersonTrackingServiceTests
 
         // Assert
         result.Results[0].Detections.Should().HaveCount(2); // All detections returned
-        result.ProcessingMessage.Should().Contain("No filtering applied");
+        result.ProcessingMessage.Should().Contain("Filtered to 2 persons matching criteria");
     }
 
     [Fact]

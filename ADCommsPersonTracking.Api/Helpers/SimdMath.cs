@@ -94,8 +94,10 @@ public static class SimdMath
         var squared = Sse.Multiply(diff, diff);
         
         // Sum the first two elements (x and y differences)
-        var temp = Sse.MoveHighToLow(squared, squared);
-        var sum = Sse.Add(squared, temp);
+        // Shuffle to move element 1 to element 0: [dy^2, dy^2, 0, 0]
+        var shuffled = Sse.Shuffle(squared, squared, 0b_00_00_00_01);
+        // Add: [dx^2 + dy^2, ?, ?, ?]
+        var sum = Sse.AddScalar(squared, shuffled);
         
         // Calculate square root
         var result = Sse.SqrtScalar(sum);

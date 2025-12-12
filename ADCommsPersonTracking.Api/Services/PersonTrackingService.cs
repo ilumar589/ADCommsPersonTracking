@@ -89,28 +89,30 @@ public class PersonTrackingService : IPersonTrackingService
                 parallelOptions,
                 async (imageData, cancellationToken) =>
                 {
-                    var imageBase64 = imageData.Image;
-                    var imageIndex = imageData.Index;
-                    var imageBytes = Convert.FromBase64String(imageBase64);
-
-                    // Detect persons in the frame using YOLO11
-                    var detections = await _detectionService.DetectPersonsAsync(imageBytes);
-                    
-                    lock (resultsLock)
+                    try
                     {
-                        totalDetections += detections.Count;
-                    }
-                    
-                    _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
+                        var imageBase64 = imageData.Image;
+                        var imageIndex = imageData.Index;
+                        var imageBytes = Convert.FromBase64String(imageBase64);
 
-                    // Get image dimensions for physical attribute estimation
-                    int imageHeight, imageWidth;
-                    using (var ms = new MemoryStream(imageBytes))
-                    using (var image = await SixLabors.ImageSharp.Image.LoadAsync(ms, cancellationToken))
-                    {
-                        imageHeight = image.Height;
-                        imageWidth = image.Width;
-                    }
+                        // Detect persons in the frame using YOLO11
+                        var detections = await _detectionService.DetectPersonsAsync(imageBytes);
+                        
+                        lock (resultsLock)
+                        {
+                            totalDetections += detections.Count;
+                        }
+                        
+                        _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
+
+                        // Get image dimensions for physical attribute estimation
+                        int imageHeight, imageWidth;
+                        using (var ms = new MemoryStream(imageBytes))
+                        using (var image = await SixLabors.ImageSharp.Image.LoadAsync(ms, cancellationToken))
+                        {
+                            imageHeight = image.Height;
+                            imageWidth = image.Width;
+                        }
 
                     // Process detections in parallel within the image
                     var detectionResults = new ConcurrentBag<(Detection detection, BoundingBox box)>();
@@ -208,15 +210,27 @@ public class PersonTrackingService : IPersonTrackingService
                     var matchedDetections = detectionResults.Select(d => d.box).ToList();
                     var detectionsList = detectionResults.Select(d => d.detection).ToList();
 
-                    // Annotate the image with matched detections only
-                    var annotatedImageBase64 = await _annotationService.AnnotateImageAsync(imageBytes, matchedDetections);
+                        // Annotate the image with matched detections only
+                        var annotatedImageBase64 = await _annotationService.AnnotateImageAsync(imageBytes, matchedDetections);
 
-                    imageResults.Add(new ImageDetectionResult
+                        imageResults.Add(new ImageDetectionResult
+                        {
+                            ImageIndex = imageIndex,
+                            Detections = detectionsList,
+                            AnnotatedImageBase64 = annotatedImageBase64
+                        });
+                    }
+                    catch (Exception ex)
                     {
-                        ImageIndex = imageIndex,
-                        Detections = detectionsList,
-                        AnnotatedImageBase64 = annotatedImageBase64
-                    });
+                        _logger.LogError(ex, "Error processing image {ImageIndex}", imageData.Index);
+                        // Add empty result to maintain image index consistency
+                        imageResults.Add(new ImageDetectionResult
+                        {
+                            ImageIndex = imageData.Index,
+                            Detections = new List<Detection>(),
+                            AnnotatedImageBase64 = string.Empty
+                        });
+                    }
                 });
 
             // Sort results by image index
