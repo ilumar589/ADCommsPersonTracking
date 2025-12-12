@@ -9,10 +9,24 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
-// Register application services
+// Configure HttpClient for YOLO11 service
+builder.Services.AddHttpClient("Yolo11", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Register detection services
+// Register both HTTP and ONNX services as concrete types
+builder.Services.AddSingleton<Yolo11HttpService>();
+builder.Services.AddSingleton<ObjectDetectionService>();
+
+// Register the composite service as the IObjectDetectionService implementation
+// This provides automatic fallback from HTTP to ONNX
+builder.Services.AddSingleton<IObjectDetectionService, CompositeObjectDetectionService>();
+
+// Register other application services
 builder.Services.AddSingleton<IPromptFeatureExtractor, PromptFeatureExtractor>();
 builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>();
-builder.Services.AddSingleton<IObjectDetectionService, ObjectDetectionService>();
 builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
