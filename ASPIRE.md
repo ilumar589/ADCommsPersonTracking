@@ -6,7 +6,7 @@ This document describes the .NET Aspire setup for the ADComms Person Tracking Sy
 
 The solution uses .NET Aspire 13 to orchestrate three main components:
 1. **ADCommsPersonTracking.Api** - ASP.NET Core Web API for person detection and tracking
-2. **ADCommsPersonTracking.Web** - Blazor WebAssembly UI for visualization
+2. **ADCommsPersonTracking.Web** - Blazor Web App with Interactive Server rendering for visualization
 3. **YOLO11 Container** - Docker container running the ultralytics/ultralytics image for object detection
 
 ## Project Structure
@@ -20,7 +20,7 @@ ADCommsPersonTracking/
 ├── ADCommsPersonTracking.ServiceDefaults/   # Shared Aspire configurations
 │   └── Extensions.cs                        # OpenTelemetry, health checks, service discovery
 ├── ADCommsPersonTracking.Api/               # API service
-├── ADCommsPersonTracking.Web/               # Blazor WebAssembly UI
+├── ADCommsPersonTracking.Web/               # Blazor Web App with Interactive Server
 └── ADCommsPersonTracking.Tests/             # Unit and integration tests
 ```
 
@@ -152,12 +152,11 @@ The API can then make HTTP requests to `http://yolo11:8000` for object detection
 
 ### Web UI → API
 
-The Web UI receives the API endpoint via environment variable:
-```
-services__api__http__0 = http://api:5000
-```
-
-The Blazor WASM app configures its `HttpClient` to use this endpoint.
+The Web UI uses Aspire service discovery to connect to the API:
+- The Blazor Web App runs on the server with Interactive Server rendering
+- HttpClient is configured with service discovery using the service name `http://adcommspersontracking-api`
+- API calls are made server-side, allowing proper use of Aspire's internal service URLs
+- SignalR maintains real-time communication between server and browser for interactive components
 
 ## Configuration Files
 
