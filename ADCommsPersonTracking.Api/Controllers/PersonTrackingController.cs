@@ -226,6 +226,26 @@ public class PersonTrackingController : ControllerBase
     }
 
     /// <summary>
+    /// Get all tracking IDs that have frames stored in blob storage
+    /// </summary>
+    /// <returns>List of tracking IDs</returns>
+    [HttpGet("tracking-ids")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<string>>> GetTrackingIds()
+    {
+        try
+        {
+            var trackingIds = await _frameStorageService.GetAllTrackingIdsAsync();
+            return Ok(trackingIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tracking IDs");
+            return StatusCode(500, "Internal server error");
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint
     /// </summary>
     [HttpGet("health")]

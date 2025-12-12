@@ -121,4 +121,42 @@ public class FrameStorageService : IFrameStorageService
             return false;
         }
     }
+
+    public async Task<List<string>> GetAllTrackingIdsAsync()
+    {
+        var trackingIds = new HashSet<string>();
+
+        try
+        {
+            var containerClient = _blobServiceClient.GetBlobContainerClient(_containerName);
+            
+            if (!await containerClient.ExistsAsync())
+            {
+                _logger.LogWarning("Container {ContainerName} does not exist", _containerName);
+                return new List<string>();
+            }
+
+            _logger.LogInformation("Retrieving all tracking IDs from blob storage");
+
+            // List all blobs in the container
+            await foreach (var blobItem in containerClient.GetBlobsAsync())
+            {
+                // Extract tracking ID from blob name (format: trackingId/frame_xxxx.png)
+                var parts = blobItem.Name.Split('/');
+                if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
+                {
+                    trackingIds.Add(parts[0]);
+                }
+            }
+
+            _logger.LogInformation("Found {Count} unique tracking IDs", trackingIds.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tracking IDs from blob storage");
+            throw;
+        }
+
+        return trackingIds.OrderByDescending(id => id).ToList();
+    }
 }

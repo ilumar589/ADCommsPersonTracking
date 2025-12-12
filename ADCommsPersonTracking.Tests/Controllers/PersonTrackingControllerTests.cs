@@ -206,6 +206,61 @@ public class PersonTrackingControllerTests
     }
 
     [Fact]
+    public async Task GetTrackingIds_ReturnsOkWithTrackingIds()
+    {
+        // Arrange
+        var trackingIds = new List<string> { "video_123", "video_456", "video_789" };
+
+        _frameStorageServiceMock
+            .Setup(s => s.GetAllTrackingIdsAsync())
+            .ReturnsAsync(trackingIds);
+
+        // Act
+        var result = await _controller.GetTrackingIds();
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(trackingIds);
+    }
+
+    [Fact]
+    public async Task GetTrackingIds_WithNoTrackingIds_ReturnsEmptyList()
+    {
+        // Arrange
+        _frameStorageServiceMock
+            .Setup(s => s.GetAllTrackingIdsAsync())
+            .ReturnsAsync(new List<string>());
+
+        // Act
+        var result = await _controller.GetTrackingIds();
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        var trackingIds = okResult!.Value as List<string>;
+        trackingIds.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetTrackingIds_WithException_ReturnsInternalServerError()
+    {
+        // Arrange
+        _frameStorageServiceMock
+            .Setup(s => s.GetAllTrackingIdsAsync())
+            .ThrowsAsync(new Exception("Test exception"));
+
+        // Act
+        var result = await _controller.GetTrackingIds();
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>();
+        var objectResult = result.Result as ObjectResult;
+        objectResult!.StatusCode.Should().Be(500);
+        objectResult.Value.Should().Be("Internal server error");
+    }
+
+    [Fact]
     public void HealthCheck_ReturnsOk()
     {
         // Act
