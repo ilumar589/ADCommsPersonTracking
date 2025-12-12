@@ -92,11 +92,16 @@ Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
 #### Option A: Run with .NET Aspire (Recommended)
 
-.NET Aspire orchestrates all services (API, Web UI, and YOLO11 Docker container) together with built-in observability, service discovery, and health checks.
+.NET Aspire orchestrates all services (API, Web UI, and YOLO11 model export container) together with built-in observability, service discovery, and health checks.
 
 ```bash
-# Ensure Docker is running for the YOLO11 container
+# Ensure Docker is running for the YOLO11 model export container
 docker --version
+
+# Build the YOLO model export Docker image
+cd docker/yolo-model-export
+docker build -t yolo-model-export .
+cd ../..
 
 # Set the AppHost as the startup project and run
 cd ADCommsPersonTracking.AppHost
@@ -107,8 +112,14 @@ This will:
 - Start the Aspire Dashboard (opens in browser automatically)
 - Launch the API service with health checks and telemetry
 - Launch the Blazor Web UI
-- Start the YOLO11 Docker container (ultralytics/ultralytics)
+- Start the YOLO11 model export container (one-time export to ONNX format)
 - Configure automatic service discovery between components
+
+The model export container will:
+- Download the YOLO11n model if not already present
+- Export it to ONNX format
+- Save it to the `models/` directory (shared via bind mount)
+- Exit after completion
 
 Access the services:
 - **Aspire Dashboard**: `http://localhost:15000` or `https://localhost:17000` (for monitoring all services)
