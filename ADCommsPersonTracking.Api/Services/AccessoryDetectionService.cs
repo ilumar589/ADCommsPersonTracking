@@ -18,6 +18,13 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
     private readonly IConfiguration _configuration;
     private InferenceSession? _session;
     private readonly float _confidenceThreshold;
+    
+    // Thresholds for spatial association
+    private const float MinIouThreshold = 0.01f; // Minimum IoU for association
+    private const float ExtendedBoxLeftRightFactor = 0.2f; // Extend person box by 20% left/right for backpacks
+    private const float ExtendedBoxTopFactor = 0.1f; // Extend person box by 10% at top
+    private const float ExtendedBoxWidthMultiplier = 1.4f; // Total width = 140% of original
+    private const float ExtendedBoxHeightMultiplier = 1.2f; // Total height = 120% of original
 
     // Known accessory and clothing keywords for basic detection
     // In a production system, this would be replaced by actual ONNX model inference
@@ -100,7 +107,7 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 
                 // Classify as accessory (backpack, handbag, suitcase are accessories)
                 if (accessory.ObjectType == "backpack" || accessory.ObjectType == "handbag" || 
-                    accessory.ObjectType == "suitcase" || accessory.ObjectType == "sports ball")
+                    accessory.ObjectType == "suitcase")
                 {
                     result.Accessories.Add(detectedItem);
                 }
@@ -121,7 +128,7 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         // Check if accessory overlaps with person or is very close to person
         // Method 1: Check IoU (Intersection over Union)
         var iou = CalculateIoU(personBox, accessoryBox);
-        if (iou > 0.01f) // Even small overlap means association
+        if (iou > MinIouThreshold) // Even small overlap means association
         {
             return true;
         }
@@ -130,10 +137,10 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         // Accessories like backpacks may extend slightly beyond person box
         var extendedPersonBox = new BoundingBox
         {
-            X = personBox.X - personBox.Width * 0.2f,
-            Y = personBox.Y - personBox.Height * 0.1f,
-            Width = personBox.Width * 1.4f,
-            Height = personBox.Height * 1.2f
+            X = personBox.X - personBox.Width * ExtendedBoxLeftRightFactor,
+            Y = personBox.Y - personBox.Height * ExtendedBoxTopFactor,
+            Width = personBox.Width * ExtendedBoxWidthMultiplier,
+            Height = personBox.Height * ExtendedBoxHeightMultiplier
         };
 
         var accessoryCenterX = accessoryBox.X + accessoryBox.Width / 2;

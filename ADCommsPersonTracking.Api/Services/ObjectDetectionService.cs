@@ -19,15 +19,14 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     private const float IouThreshold = 0.5f;
     
     // COCO class IDs for accessories
-    private static readonly HashSet<int> AccessoryClassIds = new() { 24, 26, 27, 28, 32 }; // backpack, handbag, tie, suitcase, sports ball
+    private static readonly HashSet<int> AccessoryClassIds = new() { 24, 26, 27, 28 }; // backpack, handbag, tie, suitcase
     private static readonly Dictionary<int, string> CocoClassNames = new()
     {
         { 0, "person" },
         { 24, "backpack" },
         { 26, "handbag" },
         { 27, "tie" },
-        { 28, "suitcase" },
-        { 32, "sports ball" }
+        { 28, "suitcase" }
     };
 
     public ObjectDetectionService(IConfiguration configuration, ILogger<ObjectDetectionService> logger)
