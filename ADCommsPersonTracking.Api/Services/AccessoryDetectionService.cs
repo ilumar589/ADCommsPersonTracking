@@ -25,6 +25,16 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
     private const float ExtendedBoxTopFactor = 0.1f; // Extend person box by 10% at top
     private const float ExtendedBoxWidthMultiplier = 1.4f; // Total width = 140% of original
     private const float ExtendedBoxHeightMultiplier = 1.2f; // Total height = 120% of original
+    
+    // Accessory and clothing type classifications
+    private static readonly HashSet<string> AccessoryTypes = new(StringComparer.OrdinalIgnoreCase) 
+    { 
+        "backpack", "handbag", "suitcase" 
+    };
+    private static readonly HashSet<string> ClothingTypes = new(StringComparer.OrdinalIgnoreCase) 
+    { 
+        "tie" 
+    };
 
     // Known accessory and clothing keywords for basic detection
     // In a production system, this would be replaced by actual ONNX model inference
@@ -105,15 +115,13 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 // Map YOLO class to our accessory/clothing categories
                 var detectedItem = new DetectedItem(accessory.ObjectType, accessory.BoundingBox.Confidence);
                 
-                // Classify as accessory (backpack, handbag, suitcase are accessories)
-                if (accessory.ObjectType == "backpack" || accessory.ObjectType == "handbag" || 
-                    accessory.ObjectType == "suitcase")
+                // Classify based on type
+                if (AccessoryTypes.Contains(accessory.ObjectType))
                 {
                     result.Accessories.Add(detectedItem);
                 }
-                else if (accessory.ObjectType == "tie")
+                else if (ClothingTypes.Contains(accessory.ObjectType))
                 {
-                    // Tie can be considered clothing
                     result.ClothingItems.Add(detectedItem);
                 }
             }

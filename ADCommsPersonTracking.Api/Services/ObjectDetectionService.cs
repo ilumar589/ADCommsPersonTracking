@@ -17,6 +17,8 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     private const int InputHeight = 640;
     private const float ConfidenceThreshold = 0.45f;
     private const float IouThreshold = 0.5f;
+    private const int MaxDetections = 8400; // YOLO11 output detections
+    private const int NumCocoClasses = 80; // Number of classes in COCO dataset
     
     // COCO class IDs for accessories
     private static readonly HashSet<int> AccessoryClassIds = new() { 24, 26, 27, 28 }; // backpack, handbag, tie, suitcase
@@ -170,7 +172,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         
         // YOLO11 output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
         // YOLO11 uses the same output format as YOLOv8
-        int numDetections = dims.Length > 2 ? dims[2] : 8400;
+        int numDetections = dims.Length > 2 ? dims[2] : MaxDetections;
         
         for (int i = 0; i < numDetections; i++)
         {
@@ -178,7 +180,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
             float maxScore = 0;
             int maxClass = 0;
             
-            for (int c = 0; c < 80; c++)
+            for (int c = 0; c < NumCocoClasses; c++)
             {
                 var score = output[0, 4 + c, i];
                 if (score > maxScore)
@@ -224,7 +226,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         var dims = output.Dimensions.ToArray();
         
         // YOLO11 output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
-        int numDetections = dims.Length > 2 ? dims[2] : 8400;
+        int numDetections = dims.Length > 2 ? dims[2] : MaxDetections;
         
         for (int i = 0; i < numDetections; i++)
         {
@@ -232,7 +234,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
             float maxScore = 0;
             int maxClass = 0;
             
-            for (int c = 0; c < 80; c++)
+            for (int c = 0; c < NumCocoClasses; c++)
             {
                 var score = output[0, 4 + c, i];
                 if (score > maxScore)
