@@ -13,8 +13,4 @@
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\ADCommsPersonTracking.ServiceDefaults\ADCommsPersonTracking.ServiceDefaults.csproj" />
-  </ItemGroup>
-
 </Project>
