@@ -28,6 +28,9 @@ public class PhysicalAttributeEstimator : IPhysicalAttributeEstimator
     // Threshold for hair length detection (dark pixels in upper portion)
     private const float LongHairThreshold = 0.15f;
     private const float ShortHairThreshold = 0.08f;
+    
+    // Brightness threshold for detecting dark pixels (potential hair)
+    private const int DarkPixelBrightnessThreshold = 80;
 
     public PhysicalAttributeEstimator(ILogger<PhysicalAttributeEstimator> logger)
     {
@@ -179,7 +182,7 @@ public class PhysicalAttributeEstimator : IPhysicalAttributeEstimator
                     var pixel = image[px, py];
                     var brightness = (pixel.R + pixel.G + pixel.B) / 3;
 
-                    if (brightness < 80) // Dark pixel threshold
+                    if (brightness < DarkPixelBrightnessThreshold)
                     {
                         darkPixelCount++;
                     }

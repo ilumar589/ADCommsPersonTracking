@@ -33,6 +33,10 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         "pants", "jeans", "shirt", "hoodie"
     };
 
+    // Thresholds for heuristic detection
+    private const int DarkPixelBrightnessThreshold = 60;
+    private const float DarkPixelRatioForHat = 0.30f;
+
     public AccessoryDetectionService(
         IConfiguration configuration,
         ILogger<AccessoryDetectionService> logger)
@@ -209,7 +213,7 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 var pixel = image[px, py];
                 var brightness = (pixel.R + pixel.G + pixel.B) / 3;
 
-                if (brightness < 60) // Very basic dark threshold
+                if (brightness < DarkPixelBrightnessThreshold)
                 {
                     darkPixelCount++;
                 }
@@ -218,7 +222,7 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         }
 
         // If more than 30% of top region is dark, might be a hat
-        return totalPixels > 0 && (float)darkPixelCount / totalPixels > 0.30f;
+        return totalPixels > 0 && (float)darkPixelCount / totalPixels > DarkPixelRatioForHat;
     }
 
     private async Task<bool> CheckForBagAsync(Image<Rgb24> image, int x, int y, int width, int height)
