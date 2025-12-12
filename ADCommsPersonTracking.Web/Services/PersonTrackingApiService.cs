@@ -72,14 +72,44 @@ public class PersonTrackingApiService : IPersonTrackingApiService
     {
         try
         {
-            using var content = new MultipartFormDataContent();
-            var streamContent = new StreamContent(videoStream);
-            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("video/mp4");
-            content.Add(streamContent, "video", fileName);
+            // Ensure we have a seekable stream for retry support
+            Stream seekableStream;
+            bool shouldDisposeStream = false;
 
-            var response = await _httpClient.PostAsync("api/persontracking/video/upload", content);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<VideoUploadResponse>();
+            if (videoStream.CanSeek)
+            {
+                seekableStream = videoStream;
+            }
+            else
+            {
+                // Buffer non-seekable streams
+                var memoryStream = new MemoryStream();
+                await videoStream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+                seekableStream = memoryStream;
+                shouldDisposeStream = true;
+            }
+
+            try
+            {
+                seekableStream.Position = 0; // Reset position in case of retry
+                
+                using var content = new MultipartFormDataContent();
+                var streamContent = new StreamContent(seekableStream);
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("video/mp4");
+                content.Add(streamContent, "video", fileName);
+
+                var response = await _httpClient.PostAsync("api/persontracking/video/upload", content);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<VideoUploadResponse>();
+            }
+            finally
+            {
+                if (shouldDisposeStream)
+                {
+                    await seekableStream.DisposeAsync();
+                }
+            }
         }
         catch (Exception ex)
         {
