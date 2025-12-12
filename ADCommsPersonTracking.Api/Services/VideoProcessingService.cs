@@ -9,6 +9,8 @@ public class VideoProcessingService : IVideoProcessingService
     private readonly ILogger<VideoProcessingService> _logger;
     private readonly IConfiguration _configuration;
     private static bool _ffmpegInitialized = false;
+    // Static semaphore for thread-safe initialization across all service instances
+    // This is intentionally not disposed as it's shared across the application lifetime
     private static readonly SemaphoreSlim _initLock = new(1, 1);
 
     public VideoProcessingService(ILogger<VideoProcessingService> logger, IConfiguration configuration)
@@ -37,8 +39,9 @@ public class VideoProcessingService : IVideoProcessingService
                 "ffmpeg"
             );
 
-            // Ensure directory exists
+            // Ensure directory exists (will throw if no permissions, caught by outer try-catch)
             Directory.CreateDirectory(ffmpegPath);
+            _logger.LogDebug("FFmpeg directory: {Path}", ffmpegPath);
 
             // Check if FFmpeg binaries already exist
             var ffmpegExe = Path.Combine(ffmpegPath, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
@@ -46,9 +49,10 @@ public class VideoProcessingService : IVideoProcessingService
 
             if (!File.Exists(ffmpegExe) || !File.Exists(ffprobeExe))
             {
-                _logger.LogInformation("FFmpeg binaries not found. Downloading...");
+                _logger.LogInformation("FFmpeg binaries not found. Downloading from official sources...");
                 
                 // Download FFmpeg binaries (both FFMpeg and FFProbe)
+                // Note: Uses LatestAvailable from FFMpegCore.Extensions.Downloader's trusted sources
                 var options = new FFOptions { BinaryFolder = ffmpegPath };
                 await FFMpegDownloader.DownloadBinaries(
                     FFMpegVersions.LatestAvailable,
