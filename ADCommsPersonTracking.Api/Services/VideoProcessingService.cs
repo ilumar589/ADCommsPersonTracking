@@ -1,7 +1,4 @@
 using FFMpegCore;
-using FFMpegCore.Pipes;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
 
 namespace ADCommsPersonTracking.Api.Services;
 
