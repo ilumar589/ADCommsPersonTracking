@@ -1,4 +1,5 @@
 using ADCommsPersonTracking.Api.Services;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,7 +7,7 @@ builder.AddServiceDefaults();
 
 // Wait for YOLO model file to be available before proceeding
 // The yolo-model-export container will export the model and exit
-await WaitForModelFileAsync(builder.Configuration, builder.Logging);
+await WaitForModelFileAsync(builder.Configuration, builder);
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -74,25 +75,25 @@ app.MapControllers();
 
 app.Run();
 
-static async Task WaitForModelFileAsync(IConfiguration configuration, ILoggingBuilder loggingBuilder)
+static async Task WaitForModelFileAsync(IConfiguration configuration, WebApplicationBuilder builder)
 {
-    var modelPath = configuration["ObjectDetection:ModelPath"];
+    var modelPath = configuration["ObjectDetection__ModelPath"];
     if (string.IsNullOrEmpty(modelPath))
     {
         return; // No model path configured, skip validation
     }
 
     // Create a logger for startup validation
-    using var loggerFactory = LoggerFactory.Create(builder => 
+    using var loggerFactory = LoggerFactory.Create(logBuilder => 
     {
-        builder.AddConsole();
-        builder.SetMinimumLevel(LogLevel.Information);
+        logBuilder.AddConsole();
+        logBuilder.SetMinimumLevel(LogLevel.Information);
     });
     var logger = loggerFactory.CreateLogger("Startup");
 
     var timeout = TimeSpan.FromMinutes(5); // Reasonable timeout for model export
     var checkInterval = TimeSpan.FromSeconds(2);
-    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var stopwatch = Stopwatch.StartNew();
 
     logger.LogInformation("Waiting for YOLO model file at: {ModelPath}", modelPath);
 
