@@ -8,13 +8,15 @@ namespace ADCommsPersonTracking.Api.Services;
 /// </summary>
 public class CompositeObjectDetectionService : IObjectDetectionService
 {
+    private const int DefaultRetryIntervalMinutes = 5;
+    
     private readonly Yolo11HttpService _httpService;
     private readonly ObjectDetectionService _onnxService;
     private readonly ILogger<CompositeObjectDetectionService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly TimeSpan _retryInterval;
     private bool _httpServiceFailed = false;
     private DateTime _lastHttpAttempt = DateTime.MinValue;
-    private readonly TimeSpan _retryInterval = TimeSpan.FromMinutes(5);
 
     public CompositeObjectDetectionService(
         Yolo11HttpService httpService,
@@ -27,8 +29,14 @@ public class CompositeObjectDetectionService : IObjectDetectionService
         _configuration = configuration;
         _logger = logger;
 
+        // Read retry interval from configuration
+        var retryMinutes = configuration.GetValue<int?>("ObjectDetection:HttpRetryIntervalMinutes") 
+            ?? DefaultRetryIntervalMinutes;
+        _retryInterval = TimeSpan.FromMinutes(retryMinutes);
+
         var detectionMode = configuration["ObjectDetection:Mode"];
         _logger.LogInformation("Object detection mode: {Mode}", detectionMode ?? "Auto (HTTP with ONNX fallback)");
+        _logger.LogInformation("HTTP retry interval: {Minutes} minutes", retryMinutes);
     }
 
     public async Task<List<BoundingBox>> DetectPersonsAsync(byte[] imageBytes)

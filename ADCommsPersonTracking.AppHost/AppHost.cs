@@ -5,7 +5,7 @@ var yoloConfig = builder.Configuration.GetSection("Yolo11");
 var yoloImage = yoloConfig["Image"] ?? "ultralytics/ultralytics";
 var yoloModel = yoloConfig["Model"] ?? "yolo11n.pt";
 var yoloImageSize = yoloConfig["ImageSize"] ?? "640";
-var yoloPort = int.Parse(yoloConfig["Port"] ?? "8000");
+var yoloPort = int.TryParse(yoloConfig["Port"], out var port) ? port : 8000;
 
 // Add YOLO11 container using ultralytics image with configurable settings
 var yolo11 = builder.AddContainer("yolo11", yoloImage)

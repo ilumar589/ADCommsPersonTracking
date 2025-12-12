@@ -8,6 +8,10 @@ namespace ADCommsPersonTracking.Api.Services;
 /// </summary>
 public class Yolo11HttpService : IObjectDetectionService
 {
+    private const string InferenceEndpoint = "/inference";
+    private const string ImageMediaType = "image/jpeg";
+    private const int PersonClassId = 0; // COCO dataset class ID for person
+    
     private readonly HttpClient _httpClient;
     private readonly ILogger<Yolo11HttpService> _logger;
     private readonly string? _yoloEndpoint;
@@ -53,11 +57,11 @@ public class Yolo11HttpService : IObjectDetectionService
             // Create multipart form data with the image
             using var content = new MultipartFormDataContent();
             using var imageContent = new ByteArrayContent(imageBytes);
-            imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+            imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(ImageMediaType);
             content.Add(imageContent, "image", "frame.jpg");
 
             // Send request to YOLO11 inference endpoint
-            var response = await _httpClient.PostAsync("/inference", content);
+            var response = await _httpClient.PostAsync(InferenceEndpoint, content);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -112,8 +116,8 @@ public class Yolo11HttpService : IObjectDetectionService
                     {
                         var classId = detection[5].GetInt32();
                         
-                        // Filter for persons only (class 0 in COCO dataset)
-                        if (classId == 0)
+                        // Filter for persons only (COCO dataset class ID)
+                        if (classId == PersonClassId)
                         {
                             var x = detection[0].GetSingle();
                             var y = detection[1].GetSingle();
