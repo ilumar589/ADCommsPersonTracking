@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -28,16 +29,16 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
             try
             {
                 _session = new InferenceSession(_modelPath);
-                _logger.LogInformation("YOLO11 ONNX model loaded successfully from {ModelPath}", _modelPath);
+                _logger.LogModelLoaded(_modelPath);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not load YOLO11 ONNX model from {ModelPath}. Detection will use mock data.", _modelPath);
+                _logger.LogModelLoadWarning(_modelPath, ex);
             }
         }
         else
         {
-            _logger.LogWarning("YOLO11 ONNX model not found at {ModelPath}. Detection will use mock data.", _modelPath);
+            _logger.LogModelNotFound(_modelPath);
         }
     }
 
@@ -85,12 +86,12 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
             // Parse YOLO output and filter for persons (class 0 in COCO dataset)
             var detections = ParseYoloOutput(output, originalWidth, originalHeight);
             
-            _logger.LogInformation("Detected {Count} persons in frame", detections.Count);
+            _logger.LogDetectedPersons(detections.Count);
             return detections;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during object detection");
+            _logger.LogObjectDetectionError(ex);
             throw; // Re-throw instead of returning empty list
         }
     }

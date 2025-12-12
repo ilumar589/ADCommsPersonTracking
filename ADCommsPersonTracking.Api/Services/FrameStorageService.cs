@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
@@ -28,8 +29,7 @@ public class FrameStorageService : IFrameStorageService
             var containerClient = _blobServiceClient.GetBlobContainerClient(_containerName);
             await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
 
-            _logger.LogInformation("Uploading {FrameCount} frames for tracking ID: {TrackingId}", 
-                frames.Count, trackingId);
+            _logger.LogUploadingFrames(frames.Count, trackingId);
 
             for (int i = 0; i < frames.Count; i++)
             {
@@ -39,17 +39,16 @@ public class FrameStorageService : IFrameStorageService
                 using var stream = new MemoryStream(frames[i]);
                 await blobClient.UploadAsync(stream, overwrite: true);
                 
-                _logger.LogDebug("Uploaded frame {FrameIndex} for tracking ID: {TrackingId}", i, trackingId);
+                _logger.LogUploadedFrame(i, trackingId);
             }
 
-            _logger.LogInformation("Successfully uploaded {FrameCount} frames for tracking ID: {TrackingId}", 
-                frames.Count, trackingId);
+            _logger.LogFramesUploaded(frames.Count, trackingId);
 
             return trackingId;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error uploading frames for tracking ID: {TrackingId}", trackingId);
+            _logger.LogFrameUploadError(trackingId, ex);
             throw;
         }
     }
@@ -64,11 +63,11 @@ public class FrameStorageService : IFrameStorageService
             
             if (!await containerClient.ExistsAsync())
             {
-                _logger.LogWarning("Container {ContainerName} does not exist", _containerName);
+                _logger.LogContainerNotExist(_containerName);
                 return frames;
             }
 
-            _logger.LogInformation("Retrieving frames for tracking ID: {TrackingId}", trackingId);
+            _logger.LogRetrievingFrames(trackingId);
 
             // List all blobs with the tracking ID prefix
             var prefix = $"{trackingId}/";
@@ -80,15 +79,14 @@ public class FrameStorageService : IFrameStorageService
                 await blobClient.DownloadToAsync(memoryStream);
                 frames.Add(memoryStream.ToArray());
                 
-                _logger.LogDebug("Retrieved frame: {BlobName}", blobItem.Name);
+                _logger.LogRetrievedFrame(blobItem.Name);
             }
 
-            _logger.LogInformation("Successfully retrieved {FrameCount} frames for tracking ID: {TrackingId}", 
-                frames.Count, trackingId);
+            _logger.LogFramesRetrieved(frames.Count, trackingId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving frames for tracking ID: {TrackingId}", trackingId);
+            _logger.LogFrameRetrievalError(trackingId, ex);
             throw;
         }
 
@@ -117,7 +115,7 @@ public class FrameStorageService : IFrameStorageService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking if frames exist for tracking ID: {TrackingId}", trackingId);
+            _logger.LogFrameExistenceCheckError(trackingId, ex);
             return false;
         }
     }
@@ -132,11 +130,11 @@ public class FrameStorageService : IFrameStorageService
             
             if (!await containerClient.ExistsAsync())
             {
-                _logger.LogWarning("Container {ContainerName} does not exist", _containerName);
+                _logger.LogContainerNotExist(_containerName);
                 return new List<string>();
             }
 
-            _logger.LogInformation("Retrieving all tracking IDs from blob storage");
+            _logger.LogRetrievingTrackingIds();
 
             // List all blobs in the container
             await foreach (var blobItem in containerClient.GetBlobsAsync())
@@ -149,11 +147,11 @@ public class FrameStorageService : IFrameStorageService
                 }
             }
 
-            _logger.LogInformation("Found {Count} unique tracking IDs", trackingIds.Count);
+            _logger.LogFoundTrackingIds(trackingIds.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving tracking IDs from blob storage");
+            _logger.LogTrackingIdsRetrievalError(ex);
             throw;
         }
 

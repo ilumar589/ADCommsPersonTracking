@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
 using System.Collections.Concurrent;
 
@@ -31,8 +32,7 @@ public class PersonTrackingService : IPersonTrackingService
     {
         try
         {
-            _logger.LogInformation("Processing {Count} images with prompt: {Prompt}", 
-                request.ImagesBase64.Count, request.Prompt);
+            _logger.LogProcessingImages(request.ImagesBase64.Count, request.Prompt);
 
             // Extract search features from the prompt using rule-based extraction
             var searchCriteria = _featureExtractor.ExtractFeatures(request.Prompt);
@@ -43,10 +43,9 @@ public class PersonTrackingService : IPersonTrackingService
             searchFeatures.AddRange(searchCriteria.PhysicalAttributes);
             if (searchCriteria.Height != null)
             {
-                searchFeatures.Add($"height: {searchCriteria.Height.OriginalText}");
+                searchFeatures.Add($"height: {searchCriteria.Height.Value.OriginalText}");
             }
-            _logger.LogInformation("Extracted {Count} search features from prompt (colors: {Colors})", 
-                searchFeatures.Count, string.Join(", ", searchCriteria.Colors));
+            _logger.LogExtractedSearchFeatures(searchFeatures.Count, string.Join(", ", searchCriteria.Colors));
 
             var response = new TrackingResponse
             {
@@ -66,7 +65,7 @@ public class PersonTrackingService : IPersonTrackingService
                 // Detect persons in the frame using YOLO11
                 var detections = await _detectionService.DetectPersonsAsync(imageBytes);
                 totalDetections += detections.Count;
-                _logger.LogInformation("Detected {Count} persons in image {Index}", detections.Count, imageIndex);
+                _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
 
                 // Filter detections based on color criteria
                 var matchedDetections = new List<BoundingBox>();
@@ -134,13 +133,12 @@ public class PersonTrackingService : IPersonTrackingService
                 ? $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. Filtered to {totalMatchedDetections} persons matching color criteria: {string.Join(", ", searchCriteria.Colors)}."
                 : $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. No color filtering applied.";
 
-            _logger.LogInformation("Returning {Count} matched detections out of {Total} total detections", 
-                totalMatchedDetections, totalDetections);
+            _logger.LogMatchedDetections(totalMatchedDetections, totalDetections);
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing frame");
+            _logger.LogProcessingError(ex);
             return new TrackingResponse
             {
                 Timestamp = request.Timestamp,
@@ -215,7 +213,7 @@ public class PersonTrackingService : IPersonTrackingService
         foreach (var trackId in oldTracks)
         {
             _activeTracks.TryRemove(trackId, out _);
-            _logger.LogDebug("Removed old track {TrackId}", trackId);
+            _logger.LogRemovedTrack(trackId);
         }
     }
 

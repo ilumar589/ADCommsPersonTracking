@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -46,7 +47,7 @@ public class ColorAnalysisService : IColorAnalysisService
 
             if (width <= 0 || height <= 0)
             {
-                _logger.LogWarning("Invalid bounding box dimensions for person");
+                _logger.LogInvalidBoundingBox();
                 return new PersonColorProfile();
             }
 
@@ -73,7 +74,7 @@ public class ColorAnalysisService : IColorAnalysisService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing person colors");
+            _logger.LogColorAnalysisError(ex);
             return new PersonColorProfile();
         }
     }
@@ -140,12 +141,11 @@ public class ColorAnalysisService : IColorAnalysisService
             // Convert histogram to detected colors
             var totalPixels = colorHistogram.Values.Sum(v => v.count);
             var detectedColors = colorHistogram
-                .Select(kvp => new DetectedColor
-                {
-                    ColorName = kvp.Key,
-                    Confidence = (float)kvp.Value.count / totalPixels,
-                    HexValue = ColorToHex(kvp.Value.avgRgb)
-                })
+                .Select(kvp => new DetectedColor(
+                    kvp.Key,
+                    (float)kvp.Value.count / totalPixels,
+                    ColorToHex(kvp.Value.avgRgb)
+                ))
                 .OrderByDescending(c => c.Confidence)
                 .Take(topN)
                 .ToList();
