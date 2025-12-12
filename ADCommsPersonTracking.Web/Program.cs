@@ -1,24 +1,48 @@
-using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using ADCommsPersonTracking.Web;
+using ADCommsPersonTracking.Web.Components;
 using ADCommsPersonTracking.Web.Services;
 using MudBlazor.Services;
 
-var builder = WebAssemblyHostBuilder.CreateDefault(args);
-builder.RootComponents.Add<App>("#app");
-builder.RootComponents.Add<HeadOutlet>("head::after");
+var builder = WebApplication.CreateBuilder(args);
 
-// Configure HttpClient for API calls
+// Add Aspire service defaults (service discovery, telemetry, health checks)
+builder.AddServiceDefaults();
+
+// Add services to the container
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+// Configure HttpClient for API calls with Aspire service discovery
 builder.Services.AddScoped<IPersonTrackingApiService, PersonTrackingApiService>();
 builder.Services.AddHttpClient<IPersonTrackingApiService, PersonTrackingApiService>(client =>
 {
-    // For Aspire, the base address will be set via configuration at runtime
-    // Fallback to localhost:5000 for standalone development
-    var apiBaseAddress = builder.Configuration["services:api:http:0"] ?? builder.Configuration["services:api:https:0"] ?? "http://localhost:5000";
-    client.BaseAddress = new Uri(apiBaseAddress);
-});
+    // Use service discovery to resolve the API endpoint
+    // The "adcommspersontracking-api" name matches the one defined in AppHost
+    client.BaseAddress = new Uri("http://adcommspersontracking-api");
+})
+.AddServiceDiscovery();
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
-await builder.Build().RunAsync();
+var app = builder.Build();
+
+// Map Aspire health check endpoints
+app.MapDefaultEndpoints();
+
+// Configure the HTTP request pipeline
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseAntiforgery();
+
+app.MapStaticAssets();
+
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
+
+app.Run();
