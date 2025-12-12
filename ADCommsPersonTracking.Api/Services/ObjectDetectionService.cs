@@ -43,13 +43,15 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
 
     public async Task<List<BoundingBox>> DetectPersonsAsync(byte[] imageBytes)
     {
+        if (_session == null)
+        {
+            throw new InvalidOperationException(
+                $"Inference session is not initialized. The ONNX model was not found at '{_modelPath}'. " +
+                "When running from Aspire, ensure the yolo-model-export container has completed and the model exists in the shared volume.");
+        }
+
         try
         {
-            if (_session == null)
-            {
-                _logger.LogWarning("Inference session is not initialized. Returning mock detections.");
-                throw new InvalidOperationException("Inference session is not initialized.");
-            }
 
             using var image = Image.Load<Rgb24>(imageBytes);
             var originalWidth = image.Width;
@@ -89,7 +91,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during object detection");
-            return new List<BoundingBox>();
+            throw; // Re-throw instead of returning empty list
         }
     }
 
@@ -179,23 +181,6 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         var unionArea = box1Area + box2Area - intersectionArea;
 
         return unionArea > 0 ? intersectionArea / unionArea : 0;
-    }
-
-    private List<BoundingBox> GenerateMockDetections()
-    {
-        // Return sample detections for demonstration when no model is available
-        return new List<BoundingBox>
-        {
-            new BoundingBox
-            {
-                X = 100,
-                Y = 150,
-                Width = 120,
-                Height = 280,
-                Confidence = 0.85f,
-                Label = "person"
-            }
-        };
     }
 
     public void Dispose()
