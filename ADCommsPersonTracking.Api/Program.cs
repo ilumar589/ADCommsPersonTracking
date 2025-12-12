@@ -30,6 +30,17 @@ builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>()
 builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
+// Add Azure Blob Storage client
+builder.AddAzureBlobServiceClient("blobs");
+
+// Add Redis distributed cache
+builder.AddRedisDistributedCache("redis");
+
+// Register video processing services
+builder.Services.AddSingleton<IVideoProcessingService, VideoProcessingService>();
+builder.Services.AddSingleton<IFrameStorageService, FrameStorageService>();
+builder.Services.AddSingleton<IVideoCacheService, VideoCacheService>();
+
 // Add CORS for web clients
 builder.Services.AddCors(options =>
 {
