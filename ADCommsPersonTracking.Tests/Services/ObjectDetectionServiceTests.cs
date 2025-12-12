@@ -27,32 +27,33 @@ public class ObjectDetectionServiceTests
     }
 
     [Fact]
-    public async Task DetectPersonsAsync_WithoutModel_ReturnsEmptyList()
+    public async Task DetectPersonsAsync_WithoutModel_ThrowsInvalidOperationException()
     {
         // Arrange
         var imageBytes = CreateTestImage(640, 480);
 
         // Act
-        var result = await _service.DetectPersonsAsync(imageBytes);
+        var act = async () => await _service.DetectPersonsAsync(imageBytes);
 
         // Assert
-        // When model is not available, service returns empty list
-        result.Should().NotBeNull();
-        result.Should().BeEmpty();
+        // When model is not available, service throws exception
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Inference session is not initialized*")
+            .WithMessage("*models/nonexistent.onnx*");
     }
 
     [Fact]
-    public async Task DetectPersonsAsync_WithInvalidImageBytes_ReturnsEmptyOrMockList()
+    public async Task DetectPersonsAsync_WithInvalidImageBytes_ThrowsException()
     {
         // Arrange
         var invalidBytes = new byte[] { 1, 2, 3, 4, 5 };
 
         // Act
-        var result = await _service.DetectPersonsAsync(invalidBytes);
+        var act = async () => await _service.DetectPersonsAsync(invalidBytes);
 
-        // Assert - When model is not available, it returns mock data even with invalid bytes
-        // When model is available, it would return empty list
-        result.Should().NotBeNull();
+        // Assert - When model is not available, it throws InvalidOperationException
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Inference session is not initialized*");
     }
 
     [Fact]
