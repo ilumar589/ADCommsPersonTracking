@@ -1,16 +1,13 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Read YOLO11 configuration from appsettings
-var yoloConfig = builder.Configuration.GetSection("Yolo11");
-var yoloImage = yoloConfig["Image"] ?? "ultralytics/ultralytics";
-var yoloModel = yoloConfig["Model"] ?? "yolo11n.pt";
-var yoloImageSize = yoloConfig["ImageSize"] ?? "640";
-var yoloPort = int.TryParse(yoloConfig["Port"], out var port) ? port : 8000;
+// Get the absolute path to the models directory
+var modelsPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "models"));
 
-// Add YOLO11 container using ultralytics image with configurable settings
-var yolo11 = builder.AddContainer("yolo11", yoloImage)
-    .WithHttpEndpoint(port: yoloPort, targetPort: yoloPort, name: "http")
-    .WithArgs("yolo", "serve", $"model={yoloModel}", $"imgsz={yoloImageSize}");
+// Add YOLO11 model export container
+// This container runs once to download and export the YOLO11n model to ONNX format
+// It uses a bind mount to write the model to the shared models directory
+var yoloModelExport = builder.AddDockerfile("yolo-model-export", "../docker/yolo-model-export")
+    .WithBindMount(modelsPath, "/models");
 
 // Add Azure Blob Storage emulator (Azurite)
 var storage = builder.AddAzureStorage("storage")
@@ -20,9 +17,11 @@ var blobs = storage.AddBlobs("blobs");
 // Add Redis for caching
 var redis = builder.AddRedis("redis");
 
-// Add API with YOLO11 service discovery via connection string
+// Add API with reference to the model path
+// The API will read the ONNX model from the shared models directory
+// Since the API is a .NET project (not a container), it accesses the file system directly
 var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersontracking-api")
-    .WithEnvironment("ConnectionStrings__yolo11", yolo11.GetEndpoint("http"))
+    .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, "yolo11n.onnx"))
     .WithReference(blobs)
     .WithReference(redis)
     .WithExternalHttpEndpoints();
