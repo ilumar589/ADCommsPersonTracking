@@ -230,4 +230,67 @@ public class PromptFeatureExtractorTests
         result.PhysicalAttributes.Should().BeEmpty();
         result.Height.Should().BeNull();
     }
+
+    [Fact]
+    public void ExtractFeatures_WithNewColorKeywords_ExtractsNewColors()
+    {
+        // Arrange
+        var prompt = "Find person wearing crimson jacket, turquoise pants, and lavender scarf";
+
+        // Act
+        var result = _extractor.ExtractFeatures(prompt);
+
+        // Assert
+        result.Colors.Should().Contain("crimson");
+        result.Colors.Should().Contain("turquoise");
+        result.Colors.Should().Contain("lavender");
+    }
+
+    [Fact]
+    public void ExtractFeatures_WithNewClothingKeywords_ExtractsNewClothing()
+    {
+        // Arrange
+        var prompt = "Person in parka, joggers, and loafers with turtleneck";
+
+        // Act
+        var result = _extractor.ExtractFeatures(prompt);
+
+        // Assert
+        result.ClothingItems.Should().Contain("parka");
+        result.ClothingItems.Should().Contain("joggers");
+        result.ClothingItems.Should().Contain("loafers");
+        result.ClothingItems.Should().Contain("turtleneck");
+    }
+
+    [Fact]
+    public void ExtractFeatures_WithNewAccessoryKeywords_ExtractsNewAccessories()
+    {
+        // Arrange
+        var prompt = "Person carrying tote bag and duffel, wearing beanie and goggles";
+
+        // Act
+        var result = _extractor.ExtractFeatures(prompt);
+
+        // Assert
+        result.Accessories.Should().Contain("tote");
+        result.Accessories.Should().Contain("duffel");
+        result.Accessories.Should().Contain("beanie");
+        result.Accessories.Should().Contain("goggles");
+    }
+
+    [Fact]
+    public void ExtractFeatures_WithNewPhysicalAttributeKeywords_ExtractsNewAttributes()
+    {
+        // Arrange
+        var prompt = "Find elderly person with gray-haired, bearded, and medium build";
+
+        // Act
+        var result = _extractor.ExtractFeatures(prompt);
+
+        // Assert
+        result.PhysicalAttributes.Should().Contain("elderly");
+        result.PhysicalAttributes.Should().Contain("gray-haired");
+        result.PhysicalAttributes.Should().Contain("bearded");
+        result.PhysicalAttributes.Should().Contain("medium build");
+    }
 }
