@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Export YOLO11n model to ONNX format."""
 
-import os
 from pathlib import Path
 from ultralytics import YOLO
 

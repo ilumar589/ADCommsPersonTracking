@@ -27,6 +27,7 @@ var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersont
     .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, yoloModel))
     .WithReference(blobs)
     .WithReference(redis)
+    .WaitFor(yoloModelExport)
     .WithExternalHttpEndpoints();
 
 // Add Web UI with reference to API
