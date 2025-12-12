@@ -1,0 +1,95 @@
+@page "/uploaded-videos"
+@inject IPersonTrackingApiService ApiService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Uploaded Videos - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Uploaded Videos</MudText>
+
+<MudCard Elevation="2">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Available Tracking IDs</MudText>
+        
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+            <MudText Typo="Typo.body2" Align="Align.Center">Loading tracking IDs...</MudText>
+        }
+        else if (_trackingIds == null || !_trackingIds.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No uploaded videos found. Please upload a video first from the <MudLink Href="/video-upload">Video Upload</MudLink> page.
+            </MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">
+                Click on a tracking ID to use it for person tracking.
+            </MudText>
+            
+            <MudTable Items="_trackingIds" Hover="true" Dense="true" Striped="true">
+                <HeaderContent>
+                    <MudTh>Tracking ID</MudTh>
+                    <MudTh Style="text-align: right;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Tracking ID">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Style="text-align: right;">
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Secondary" 
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Search"
+                                   OnClick="@(() => NavigateToTracking(context))">
+                            Use for Tracking
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private List<string>? _trackingIds;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTrackingIds();
+    }
+
+    private async Task LoadTrackingIds()
+    {
+        _loading = true;
+        
+        try
+        {
+            _trackingIds = await ApiService.GetTrackingIdsAsync();
+            
+            if (_trackingIds == null)
+            {
+                Snackbar.Add("Failed to load tracking IDs", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add($"Loaded {_trackingIds.Count} tracking ID(s)", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tracking IDs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void NavigateToTracking(string trackingId)
+    {
+        NavigationManager.NavigateTo($"/track-submission?trackingId={trackingId}");
+    }
+}

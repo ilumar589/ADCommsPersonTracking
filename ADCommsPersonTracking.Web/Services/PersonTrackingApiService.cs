@@ -132,4 +132,17 @@ public class PersonTrackingApiService : IPersonTrackingApiService
             return null;
         }
     }
+
+    public async Task<List<string>?> GetTrackingIdsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<string>>("api/persontracking/tracking-ids");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tracking IDs");
+            return null;
+        }
+    }
 }
