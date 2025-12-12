@@ -1,3 +1,4 @@
+using ADCommsPersonTracking.Api.Helpers;
 using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
 using System.Collections.Concurrent;
@@ -10,22 +11,33 @@ public class PersonTrackingService : IPersonTrackingService
     private readonly IPromptFeatureExtractor _featureExtractor;
     private readonly IImageAnnotationService _annotationService;
     private readonly IColorAnalysisService _colorAnalysisService;
+    private readonly IAccessoryDetectionService _accessoryDetectionService;
+    private readonly IPhysicalAttributeEstimator _physicalAttributeEstimator;
     private readonly ILogger<PersonTrackingService> _logger;
+    private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, PersonTrack> _activeTracks = new();
     private readonly TimeSpan _trackTimeout = TimeSpan.FromMinutes(5);
+    private readonly int _maxDegreeOfParallelism;
 
     public PersonTrackingService(
         IObjectDetectionService detectionService,
         IPromptFeatureExtractor featureExtractor,
         IImageAnnotationService annotationService,
         IColorAnalysisService colorAnalysisService,
+        IAccessoryDetectionService accessoryDetectionService,
+        IPhysicalAttributeEstimator physicalAttributeEstimator,
+        IConfiguration configuration,
         ILogger<PersonTrackingService> logger)
     {
         _detectionService = detectionService;
         _featureExtractor = featureExtractor;
         _annotationService = annotationService;
         _colorAnalysisService = colorAnalysisService;
+        _accessoryDetectionService = accessoryDetectionService;
+        _physicalAttributeEstimator = physicalAttributeEstimator;
+        _configuration = configuration;
         _logger = logger;
+        _maxDegreeOfParallelism = configuration.GetValue("Processing:MaxDegreeOfParallelism", Environment.ProcessorCount);
     }
 
     public async Task<TrackingResponse> ProcessFrameAsync(TrackingRequest request)
@@ -55,83 +67,194 @@ public class PersonTrackingService : IPersonTrackingService
 
             var totalDetections = 0;
             var totalMatchedDetections = 0;
+            var resultsLock = new object();
 
-            // Process each image
-            for (int imageIndex = 0; imageIndex < request.ImagesBase64.Count; imageIndex++)
-            {
-                var imageBase64 = request.ImagesBase64[imageIndex];
-                var imageBytes = Convert.FromBase64String(imageBase64);
+            // Check if we have any criteria
+            var hasCriteria = searchCriteria.Colors.Count > 0 || 
+                             searchCriteria.ClothingItems.Count > 0 || 
+                             searchCriteria.Accessories.Count > 0 || 
+                             searchCriteria.PhysicalAttributes.Count > 0 ||
+                             searchCriteria.Height != null;
 
-                // Detect persons in the frame using YOLO11
-                var detections = await _detectionService.DetectPersonsAsync(imageBytes);
-                totalDetections += detections.Count;
-                _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
+            // Process images in parallel
+            var parallelOptions = new ParallelOptions 
+            { 
+                MaxDegreeOfParallelism = _maxDegreeOfParallelism 
+            };
 
-                // Filter detections based on color criteria
-                var matchedDetections = new List<BoundingBox>();
-                var detectionResults = new List<Detection>();
+            var imageResults = new ConcurrentBag<ImageDetectionResult>();
 
-                foreach (var detection in detections)
+            await Parallel.ForEachAsync(
+                request.ImagesBase64.Select((img, idx) => new { Image = img, Index = idx }),
+                parallelOptions,
+                async (imageData, cancellationToken) =>
                 {
-                    // Analyze colors for this person
-                    var colorProfile = await _colorAnalysisService.AnalyzePersonColorsAsync(imageBytes, detection);
-
-                    // Check if person matches color criteria
-                    var hasColorCriteria = searchCriteria.Colors.Count > 0;
-                    var matchesColors = _colorAnalysisService.MatchesColorCriteria(colorProfile, searchCriteria.Colors);
-
-                    // If no color criteria specified, include all detections
-                    // If color criteria specified, only include matching detections
-                    if (!hasColorCriteria || matchesColors)
+                    try
                     {
-                        matchedDetections.Add(detection);
-                        totalMatchedDetections++;
+                        var imageBase64 = imageData.Image;
+                        var imageIndex = imageData.Index;
+                        var imageBytes = Convert.FromBase64String(imageBase64);
 
-                        var trackingId = GetOrCreateTrackingId(detection, request.Timestamp);
-                        var matchedCriteria = new List<string>();
+                        // Detect persons in the frame using YOLO11
+                        var detections = await _detectionService.DetectPersonsAsync(imageBytes);
                         
-                        if (matchesColors && hasColorCriteria)
+                        lock (resultsLock)
                         {
-                            // Add the specific colors that matched from all regions (upper body, lower body, and overall)
-                            var allDetectedColorNames = colorProfile.UpperBodyColors
-                                .Concat(colorProfile.LowerBodyColors)
-                                .Concat(colorProfile.OverallColors)
-                                .Select(c => c.ColorName.ToLowerInvariant())
-                                .ToHashSet();
-                            matchedCriteria.AddRange(searchCriteria.Colors.Where(c => allDetectedColorNames.Contains(c.ToLowerInvariant())));
+                            totalDetections += detections.Count;
+                        }
+                        
+                        _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
+
+                        // Get image dimensions for physical attribute estimation
+                        int imageHeight, imageWidth;
+                        using (var ms = new MemoryStream(imageBytes))
+                        using (var image = await SixLabors.ImageSharp.Image.LoadAsync(ms, cancellationToken))
+                        {
+                            imageHeight = image.Height;
+                            imageWidth = image.Width;
                         }
 
-                        detectionResults.Add(new Detection
+                    // Process detections in parallel within the image
+                    var detectionResults = new ConcurrentBag<(Detection detection, BoundingBox box)>();
+
+                    await Parallel.ForEachAsync(
+                        detections,
+                        new ParallelOptions { MaxDegreeOfParallelism = _maxDegreeOfParallelism },
+                        async (detection, ct) =>
                         {
-                            TrackingId = trackingId,
-                            BoundingBox = detection,
-                            Description = string.Join(", ", searchFeatures),
-                            MatchScore = detection.Confidence,
-                            MatchedCriteria = matchedCriteria
+                            // Analyze all attributes for this person in parallel
+                            var colorTask = _colorAnalysisService.AnalyzePersonColorsAsync(imageBytes, detection);
+                            var accessoryTask = _accessoryDetectionService.DetectAccessoriesAsync(imageBytes, detection);
+                            var physicalTask = _physicalAttributeEstimator.EstimateAttributesAsync(imageBytes, detection, imageHeight, imageWidth);
+
+                            await Task.WhenAll(colorTask, accessoryTask, physicalTask);
+
+                            var colorProfile = await colorTask;
+                            var accessoryResult = await accessoryTask;
+                            var physicalAttributes = await physicalTask;
+
+                            // Check if person matches ALL criteria
+                            var matchesColors = !hasCriteria || searchCriteria.Colors.Count == 0 || 
+                                              _colorAnalysisService.MatchesColorCriteria(colorProfile, searchCriteria.Colors);
+                            var matchesAccessories = searchCriteria.ClothingItems.Count == 0 && searchCriteria.Accessories.Count == 0 ||
+                                                    _accessoryDetectionService.MatchesCriteria(accessoryResult, searchCriteria.ClothingItems, searchCriteria.Accessories);
+                            var matchesPhysical = (searchCriteria.PhysicalAttributes.Count == 0 && searchCriteria.Height == null) ||
+                                                 _physicalAttributeEstimator.MatchesCriteria(physicalAttributes, searchCriteria.PhysicalAttributes, searchCriteria.Height);
+
+                            // Include detection only if it matches all specified criteria
+                            if (!hasCriteria || (matchesColors && matchesAccessories && matchesPhysical))
+                            {
+                                var trackingId = GetOrCreateTrackingId(detection, request.Timestamp);
+                                var matchedCriteria = new List<string>();
+
+                                // Collect matched colors
+                                if (matchesColors && searchCriteria.Colors.Count > 0)
+                                {
+                                    var allDetectedColorNames = colorProfile.UpperBodyColors
+                                        .Concat(colorProfile.LowerBodyColors)
+                                        .Concat(colorProfile.OverallColors)
+                                        .Select(c => c.ColorName.ToLowerInvariant())
+                                        .ToHashSet();
+                                    matchedCriteria.AddRange(searchCriteria.Colors.Where(c => allDetectedColorNames.Contains(c.ToLowerInvariant())));
+                                }
+
+                                // Collect matched accessories
+                                if (matchesAccessories && (searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0))
+                                {
+                                    var detectedItems = accessoryResult.Accessories.Concat(accessoryResult.ClothingItems)
+                                        .Select(a => a.Label.ToLowerInvariant())
+                                        .ToHashSet();
+                                    
+                                    matchedCriteria.AddRange(searchCriteria.Accessories.Where(a => 
+                                        detectedItems.Any(d => d.Contains(a.ToLowerInvariant()) || a.ToLowerInvariant().Contains(d))));
+                                    matchedCriteria.AddRange(searchCriteria.ClothingItems.Where(c => 
+                                        detectedItems.Any(d => d.Contains(c.ToLowerInvariant()) || c.ToLowerInvariant().Contains(d))));
+                                }
+
+                                // Collect matched physical attributes
+                                if (matchesPhysical && (searchCriteria.PhysicalAttributes.Count > 0 || searchCriteria.Height != null))
+                                {
+                                    matchedCriteria.AddRange(physicalAttributes.AllAttributes.Where(a =>
+                                        searchCriteria.PhysicalAttributes.Any(s => 
+                                            a.ToLowerInvariant().Contains(s.ToLowerInvariant()) || 
+                                            s.ToLowerInvariant().Contains(a.ToLowerInvariant()))));
+                                    
+                                    if (searchCriteria.Height != null)
+                                    {
+                                        matchedCriteria.Add($"height: ~{physicalAttributes.EstimatedHeightMeters:F2}m");
+                                    }
+                                }
+
+                                var detectionResult = new Detection
+                                {
+                                    TrackingId = trackingId,
+                                    BoundingBox = detection,
+                                    Description = string.Join(", ", searchFeatures),
+                                    MatchScore = detection.Confidence,
+                                    MatchedCriteria = matchedCriteria
+                                };
+
+                                detectionResults.Add((detectionResult, detection));
+
+                                // Update tracking information
+                                UpdateTrack(trackingId, detection, searchFeatures, request.Timestamp);
+
+                                lock (resultsLock)
+                                {
+                                    totalMatchedDetections++;
+                                }
+                            }
                         });
 
-                        // Update tracking information
-                        UpdateTrack(trackingId, detection, searchFeatures, request.Timestamp);
+                    // Convert detection results to lists
+                    var matchedDetections = detectionResults.Select(d => d.box).ToList();
+                    var detectionsList = detectionResults.Select(d => d.detection).ToList();
+
+                        // Annotate the image with matched detections only
+                        var annotatedImageBase64 = await _annotationService.AnnotateImageAsync(imageBytes, matchedDetections);
+
+                        imageResults.Add(new ImageDetectionResult
+                        {
+                            ImageIndex = imageIndex,
+                            Detections = detectionsList,
+                            AnnotatedImageBase64 = annotatedImageBase64
+                        });
                     }
-                }
-
-                // Annotate the image with matched detections only
-                var annotatedImageBase64 = await _annotationService.AnnotateImageAsync(imageBytes, matchedDetections);
-
-                response.Results.Add(new ImageDetectionResult
-                {
-                    ImageIndex = imageIndex,
-                    Detections = detectionResults,
-                    AnnotatedImageBase64 = annotatedImageBase64
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error processing image {ImageIndex}", imageData.Index);
+                        // Add empty result to maintain image index consistency
+                        imageResults.Add(new ImageDetectionResult
+                        {
+                            ImageIndex = imageData.Index,
+                            Detections = new List<Detection>(),
+                            AnnotatedImageBase64 = string.Empty
+                        });
+                    }
                 });
-            }
+
+            // Sort results by image index
+            response.Results = imageResults.OrderBy(r => r.ImageIndex).ToList();
 
             // Clean up old tracks
             CleanupOldTracks();
 
-            response.ProcessingMessage = searchCriteria.Colors.Count > 0
-                ? $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. Filtered to {totalMatchedDetections} persons matching color criteria: {string.Join(", ", searchCriteria.Colors)}."
-                : $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. No color filtering applied.";
+            // Build processing message
+            var criteriaDescription = new List<string>();
+            if (searchCriteria.Colors.Count > 0)
+                criteriaDescription.Add($"colors: {string.Join(", ", searchCriteria.Colors)}");
+            if (searchCriteria.ClothingItems.Count > 0)
+                criteriaDescription.Add($"clothing: {string.Join(", ", searchCriteria.ClothingItems)}");
+            if (searchCriteria.Accessories.Count > 0)
+                criteriaDescription.Add($"accessories: {string.Join(", ", searchCriteria.Accessories)}");
+            if (searchCriteria.PhysicalAttributes.Count > 0)
+                criteriaDescription.Add($"attributes: {string.Join(", ", searchCriteria.PhysicalAttributes)}");
+            if (searchCriteria.Height != null)
+                criteriaDescription.Add($"height: {searchCriteria.Height.Value.OriginalText}");
+
+            response.ProcessingMessage = hasCriteria
+                ? $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. Filtered to {totalMatchedDetections} persons matching criteria: {string.Join("; ", criteriaDescription)}."
+                : $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. No filtering applied.";
 
             _logger.LogMatchedDetections(totalMatchedDetections, totalDetections);
             return response;
@@ -224,6 +347,7 @@ public class PersonTrackingService : IPersonTrackingService
         var cx2 = box2.X + box2.Width / 2;
         var cy2 = box2.Y + box2.Height / 2;
 
-        return (float)Math.Sqrt(Math.Pow(cx1 - cx2, 2) + Math.Pow(cy1 - cy2, 2));
+        // Use SIMD-optimized distance calculation
+        return SimdMath.CalculateDistance(cx1, cy1, cx2, cy2);
     }
 }

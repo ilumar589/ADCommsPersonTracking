@@ -193,10 +193,8 @@ public class ColorAnalysisService : IColorAnalysisService
 
     private double CalculateColorDistance(Rgb24 color1, Rgb24 color2)
     {
-        var rDiff = color1.R - color2.R;
-        var gDiff = color1.G - color2.G;
-        var bDiff = color1.B - color2.B;
-        return Math.Sqrt(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff);
+        // Use SIMD-optimized color distance calculation
+        return Helpers.SimdMath.CalculateColorDistance(color1.R, color1.G, color1.B, color2.R, color2.G, color2.B);
     }
 
     private string ColorToHex(Rgb24 color)
