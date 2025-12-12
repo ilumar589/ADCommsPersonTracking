@@ -35,22 +35,23 @@ The ADComms Person Tracking System is a .NET 10 web application designed to proc
 
 #### ObjectDetectionService (`IObjectDetectionService`)
 
-**Responsibility**: Person detection in video frames
+**Responsibility**: Person detection in video frames using local ONNX inference
 
 **Technology**: 
 - ONNX Runtime with YOLO11 models
 - Supports models: yolo11n (nano) to yolo11x (extra-large)
 - Optimized for old hardware with nano model
+- Local inference only - no HTTP calls
 
 **Process**:
 1. Receives frame as byte array
 2. Preprocesses image (resize to 640x640)
-3. Runs YOLO11 inference
+3. Runs YOLO11 inference using ONNX Runtime
 4. Filters for person class (COCO class 0)
 5. Applies Non-Maximum Suppression (NMS)
 6. Returns bounding boxes with confidence scores
 
-**Graceful Degradation**: Returns mock detections when model unavailable
+**Error Handling**: Throws exception when model is not available
 
 #### TrackingLlmService (`ITrackingLlmService`)
 
