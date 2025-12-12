@@ -14,6 +14,9 @@ public class PersonTrackingServiceTests
     private readonly Mock<IPromptFeatureExtractor> _featureExtractorMock;
     private readonly Mock<IImageAnnotationService> _annotationServiceMock;
     private readonly Mock<IColorAnalysisService> _colorAnalysisServiceMock;
+    private readonly Mock<IAccessoryDetectionService> _accessoryDetectionServiceMock;
+    private readonly Mock<IPhysicalAttributeEstimator> _physicalAttributeEstimatorMock;
+    private readonly Mock<Microsoft.Extensions.Configuration.IConfiguration> _configurationMock;
     private readonly PersonTrackingService _service;
 
     public PersonTrackingServiceTests()
@@ -22,6 +25,13 @@ public class PersonTrackingServiceTests
         _featureExtractorMock = new Mock<IPromptFeatureExtractor>();
         _annotationServiceMock = new Mock<IImageAnnotationService>();
         _colorAnalysisServiceMock = new Mock<IColorAnalysisService>();
+        _accessoryDetectionServiceMock = new Mock<IAccessoryDetectionService>();
+        _physicalAttributeEstimatorMock = new Mock<IPhysicalAttributeEstimator>();
+        _configurationMock = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+        
+        // Setup default configuration
+        _configurationMock.Setup(c => c.GetSection("Processing:MaxDegreeOfParallelism").Value).Returns("0");
+        
         var logger = Mock.Of<ILogger<PersonTrackingService>>();
 
         _service = new PersonTrackingService(
@@ -29,7 +39,29 @@ public class PersonTrackingServiceTests
             _featureExtractorMock.Object,
             _annotationServiceMock.Object,
             _colorAnalysisServiceMock.Object,
+            _accessoryDetectionServiceMock.Object,
+            _physicalAttributeEstimatorMock.Object,
+            _configurationMock.Object,
             logger);
+    }
+
+    private void SetupNewServiceMocks()
+    {
+        _accessoryDetectionServiceMock
+            .Setup(s => s.DetectAccessoriesAsync(It.IsAny<byte[]>(), It.IsAny<BoundingBox>()))
+            .ReturnsAsync(new AccessoryDetectionResult());
+
+        _accessoryDetectionServiceMock
+            .Setup(s => s.MatchesCriteria(It.IsAny<AccessoryDetectionResult>(), It.IsAny<List<string>>(), It.IsAny<List<string>>()))
+            .Returns(true);
+
+        _physicalAttributeEstimatorMock
+            .Setup(s => s.EstimateAttributesAsync(It.IsAny<byte[]>(), It.IsAny<BoundingBox>(), It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new PhysicalAttributes());
+
+        _physicalAttributeEstimatorMock
+            .Setup(s => s.MatchesCriteria(It.IsAny<PhysicalAttributes>(), It.IsAny<List<string>>(), It.IsAny<HeightInfo?>()))
+            .Returns(true);
     }
 
     [Fact]
@@ -61,6 +93,8 @@ public class PersonTrackingServiceTests
         _colorAnalysisServiceMock
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
+
+        SetupNewServiceMocks();
 
         // Act
         var result = await _service.ProcessFrameAsync(request);
@@ -109,6 +143,8 @@ public class PersonTrackingServiceTests
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
 
+        SetupNewServiceMocks();
+
         // Act
         var result = await _service.ProcessFrameAsync(request);
 
@@ -153,6 +189,8 @@ public class PersonTrackingServiceTests
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
 
+        SetupNewServiceMocks();
+
         // Act
         var result = await _service.ProcessFrameAsync(request);
 
@@ -192,6 +230,8 @@ public class PersonTrackingServiceTests
         _colorAnalysisServiceMock
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
+
+        SetupNewServiceMocks();
 
         // Act - First frame
         var result1 = await _service.ProcessFrameAsync(request1);
@@ -237,6 +277,8 @@ public class PersonTrackingServiceTests
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
 
+        SetupNewServiceMocks();
+
         // Act
         await _service.ProcessFrameAsync(request);
         var tracks = await _service.GetActiveTracksAsync();
@@ -279,6 +321,8 @@ public class PersonTrackingServiceTests
         _colorAnalysisServiceMock
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
+
+        SetupNewServiceMocks();
 
         var result = await _service.ProcessFrameAsync(request);
         var trackingId = result.Results[0].Detections.First().TrackingId;
@@ -450,6 +494,8 @@ public class PersonTrackingServiceTests
             .Setup(s => s.MatchesColorCriteria(nonMatchingColorProfile, It.IsAny<List<string>>()))
             .Returns(false);
 
+        SetupNewServiceMocks();
+
         // Act
         var result = await _service.ProcessFrameAsync(request);
 
@@ -496,12 +542,14 @@ public class PersonTrackingServiceTests
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
 
+        SetupNewServiceMocks();
+
         // Act
         var result = await _service.ProcessFrameAsync(request);
 
         // Assert
         result.Results[0].Detections.Should().HaveCount(2); // All detections returned
-        result.ProcessingMessage.Should().Contain("No color filtering applied");
+        result.ProcessingMessage.Should().Contain("No filtering applied");
     }
 
     [Fact]
@@ -543,6 +591,8 @@ public class PersonTrackingServiceTests
         _colorAnalysisServiceMock
             .Setup(s => s.MatchesColorCriteria(It.IsAny<PersonColorProfile>(), It.IsAny<List<string>>()))
             .Returns(true);
+
+        SetupNewServiceMocks();
 
         // Act
         var result = await _service.ProcessFrameAsync(request);
