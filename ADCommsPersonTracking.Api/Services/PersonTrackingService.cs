@@ -95,8 +95,21 @@ public class PersonTrackingService : IPersonTrackingService
                         var imageIndex = imageData.Index;
                         var imageBytes = Convert.FromBase64String(imageBase64);
 
-                        // Detect persons in the frame using YOLO11
-                        var detections = await _detectionService.DetectPersonsAsync(imageBytes);
+                        // Detect persons and accessories in the frame using YOLO11
+                        // Only use new method if searching for accessories
+                        List<BoundingBox> detections;
+                        List<DetectedObject> allAccessories = new();
+                        
+                        if (searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0)
+                        {
+                            var allObjects = await _detectionService.DetectObjectsAsync(imageBytes);
+                            detections = allObjects.Where(o => o.ClassId == 0).Select(o => o.BoundingBox).ToList();
+                            allAccessories = allObjects.Where(o => o.ClassId != 0).ToList();
+                        }
+                        else
+                        {
+                            detections = await _detectionService.DetectPersonsAsync(imageBytes);
+                        }
                         
                         lock (resultsLock)
                         {
@@ -124,14 +137,23 @@ public class PersonTrackingService : IPersonTrackingService
                         {
                             // Analyze all attributes for this person in parallel
                             var colorTask = _colorAnalysisService.AnalyzePersonColorsAsync(imageBytes, detection);
-                            var accessoryTask = _accessoryDetectionService.DetectAccessoriesAsync(imageBytes, detection);
                             var physicalTask = _physicalAttributeEstimator.EstimateAttributesAsync(imageBytes, detection, imageHeight, imageWidth);
 
-                            await Task.WhenAll(colorTask, accessoryTask, physicalTask);
+                            await Task.WhenAll(colorTask, physicalTask);
 
                             var colorProfile = await colorTask;
-                            var accessoryResult = await accessoryTask;
                             var physicalAttributes = await physicalTask;
+                            
+                            // Detect accessories using YOLO-detected accessories if available
+                            AccessoryDetectionResult accessoryResult;
+                            if (allAccessories.Count > 0)
+                            {
+                                accessoryResult = _accessoryDetectionService.DetectAccessoriesFromYolo(detection, allAccessories);
+                            }
+                            else
+                            {
+                                accessoryResult = await _accessoryDetectionService.DetectAccessoriesAsync(imageBytes, detection);
+                            }
 
                             // Check if person matches ALL criteria
                             var matchesColors = !hasCriteria || searchCriteria.Colors.Count == 0 || 

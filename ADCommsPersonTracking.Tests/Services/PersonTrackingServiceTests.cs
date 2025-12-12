@@ -57,6 +57,13 @@ public class PersonTrackingServiceTests
             .ReturnsAsync(new AccessoryDetectionResult());
 
         _accessoryDetectionServiceMock
+            .Setup(s => s.DetectAccessoriesFromYolo(It.IsAny<BoundingBox>(), It.IsAny<List<DetectedObject>>()))
+            .Returns(new AccessoryDetectionResult
+            {
+                ClothingItems = new List<DetectedItem> { new DetectedItem("jacket", 0.8f) }
+            });
+
+        _accessoryDetectionServiceMock
             .Setup(s => s.MatchesCriteria(It.IsAny<AccessoryDetectionResult>(), It.IsAny<List<string>>(), It.IsAny<List<string>>()))
             .Returns(true);
 
@@ -69,6 +76,22 @@ public class PersonTrackingServiceTests
             .Returns(true);
     }
 
+    private void SetupDetectionServiceMock(List<BoundingBox> detections)
+    {
+        _detectionServiceMock
+            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
+            .ReturnsAsync(detections);
+
+        _detectionServiceMock
+            .Setup(s => s.DetectObjectsAsync(It.IsAny<byte[]>()))
+            .ReturnsAsync(detections.Select(d => new DetectedObject
+            {
+                ClassId = 0,
+                ObjectType = "person",
+                BoundingBox = d
+            }).ToList());
+    }
+
     [Fact]
     public async Task ProcessFrameAsync_WithValidRequest_ReturnsResponse()
     {
@@ -79,9 +102,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -128,9 +149,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -174,9 +193,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -216,9 +233,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(new List<BoundingBox> { detection });
+        SetupDetectionServiceMock(new List<BoundingBox> { detection });
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -262,9 +277,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -307,9 +320,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -358,9 +369,7 @@ public class PersonTrackingServiceTests
         var searchCriteria = CreateTestSearchCriteria();
         var annotatedImage = "base64AnnotatedImage";
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(new List<BoundingBox>());
+        SetupDetectionServiceMock(new List<BoundingBox>());
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -473,9 +482,7 @@ public class PersonTrackingServiceTests
             }
         };
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -527,9 +534,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))
@@ -577,9 +582,7 @@ public class PersonTrackingServiceTests
         var annotatedImage = "base64AnnotatedImage";
         var colorProfile = CreateTestColorProfile();
 
-        _detectionServiceMock
-            .Setup(s => s.DetectPersonsAsync(It.IsAny<byte[]>()))
-            .ReturnsAsync(detections);
+        SetupDetectionServiceMock(detections);
 
         _featureExtractorMock
             .Setup(s => s.ExtractFeatures(It.IsAny<string>()))

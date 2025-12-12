@@ -17,6 +17,18 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     private const int InputHeight = 640;
     private const float ConfidenceThreshold = 0.45f;
     private const float IouThreshold = 0.5f;
+    
+    // COCO class IDs for accessories
+    private static readonly HashSet<int> AccessoryClassIds = new() { 24, 26, 27, 28, 32 }; // backpack, handbag, tie, suitcase, sports ball
+    private static readonly Dictionary<int, string> CocoClassNames = new()
+    {
+        { 0, "person" },
+        { 24, "backpack" },
+        { 26, "handbag" },
+        { 27, "tie" },
+        { 28, "suitcase" },
+        { 32, "sports ball" }
+    };
 
     public ObjectDetectionService(IConfiguration configuration, ILogger<ObjectDetectionService> logger)
     {
@@ -96,6 +108,62 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         }
     }
 
+    public async Task<List<DetectedObject>> DetectObjectsAsync(byte[] imageBytes)
+    {
+        if (_session == null)
+        {
+            throw new InvalidOperationException(
+                $"Inference session is not initialized. The ONNX model was not found at '{_modelPath}'. " +
+                "When running from Aspire, ensure the yolo-model-export container has completed and the model exists in the shared volume.");
+        }
+
+        try
+        {
+            using var image = Image.Load<Rgb24>(imageBytes);
+            var originalWidth = image.Width;
+            var originalHeight = image.Height;
+
+            // Resize image to model input size
+            image.Mutate(x => x.Resize(InputWidth, InputHeight));
+
+            // Prepare input tensor
+            var input = new DenseTensor<float>(new[] { 1, 3, InputHeight, InputWidth });
+            for (int y = 0; y < InputHeight; y++)
+            {
+                for (int x = 0; x < InputWidth; x++)
+                {
+                    var pixel = image[x, y];
+                    input[0, 0, y, x] = pixel.R / 255f;
+                    input[0, 1, y, x] = pixel.G / 255f;
+                    input[0, 2, y, x] = pixel.B / 255f;
+                }
+            }
+
+            // Run inference
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("images", input)
+            };
+
+            using var results = _session.Run(inputs);
+            var output = results.First().AsTensor<float>();
+
+            // Parse YOLO output for persons and accessories
+            var detections = ParseYoloOutputForObjects(output, originalWidth, originalHeight);
+            
+            _logger.LogInformation("Detected {PersonCount} persons and {AccessoryCount} accessories", 
+                detections.Count(d => d.ClassId == 0), 
+                detections.Count(d => d.ClassId != 0));
+            
+            return detections;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogObjectDetectionError(ex);
+            throw;
+        }
+    }
+
     private List<BoundingBox> ParseYoloOutput(Tensor<float> output, int originalWidth, int originalHeight)
     {
         var detections = new List<BoundingBox>();
@@ -149,6 +217,92 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
 
         // Apply Non-Maximum Suppression
         return ApplyNMS(detections);
+    }
+
+    private List<DetectedObject> ParseYoloOutputForObjects(Tensor<float> output, int originalWidth, int originalHeight)
+    {
+        var detections = new List<DetectedObject>();
+        var dims = output.Dimensions.ToArray();
+        
+        // YOLO11 output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
+        int numDetections = dims.Length > 2 ? dims[2] : 8400;
+        
+        for (int i = 0; i < numDetections; i++)
+        {
+            // Get class scores (skip first 4 bbox coordinates)
+            float maxScore = 0;
+            int maxClass = 0;
+            
+            for (int c = 0; c < 80; c++)
+            {
+                var score = output[0, 4 + c, i];
+                if (score > maxScore)
+                {
+                    maxScore = score;
+                    maxClass = c;
+                }
+            }
+
+            // Check if it's a person (class 0) or an accessory class and meets confidence threshold
+            if ((maxClass == 0 || AccessoryClassIds.Contains(maxClass)) && maxScore >= ConfidenceThreshold)
+            {
+                var cx = output[0, 0, i];
+                var cy = output[0, 1, i];
+                var w = output[0, 2, i];
+                var h = output[0, 3, i];
+
+                // Convert from model coordinates to original image coordinates
+                var x = (cx - w / 2) * originalWidth / InputWidth;
+                var y = (cy - h / 2) * originalHeight / InputHeight;
+                var width = w * originalWidth / InputWidth;
+                var height = h * originalHeight / InputHeight;
+
+                var label = CocoClassNames.TryGetValue(maxClass, out var className) ? className : $"class_{maxClass}";
+
+                detections.Add(new DetectedObject
+                {
+                    ClassId = maxClass,
+                    ObjectType = label,
+                    BoundingBox = new BoundingBox
+                    {
+                        X = x,
+                        Y = y,
+                        Width = width,
+                        Height = height,
+                        Confidence = maxScore,
+                        Label = label
+                    }
+                });
+            }
+        }
+
+        // Apply Non-Maximum Suppression per class
+        return ApplyNMSPerClass(detections);
+    }
+
+    private List<DetectedObject> ApplyNMSPerClass(List<DetectedObject> objects)
+    {
+        var result = new List<DetectedObject>();
+        
+        // Group by class and apply NMS separately for each class
+        var groupedByClass = objects.GroupBy(o => o.ClassId);
+        
+        foreach (var classGroup in groupedByClass)
+        {
+            var sortedObjects = classGroup.OrderByDescending(o => o.BoundingBox.Confidence).ToList();
+            
+            while (sortedObjects.Any())
+            {
+                var current = sortedObjects.First();
+                result.Add(current);
+                sortedObjects.RemoveAt(0);
+                
+                sortedObjects = sortedObjects.Where(obj => 
+                    CalculateIoU(current.BoundingBox, obj.BoundingBox) < IouThreshold).ToList();
+            }
+        }
+        
+        return result;
     }
 
     private List<BoundingBox> ApplyNMS(List<BoundingBox> boxes)

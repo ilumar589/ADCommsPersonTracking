@@ -85,6 +85,81 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         }
     }
 
+    public AccessoryDetectionResult DetectAccessoriesFromYolo(BoundingBox personBox, List<DetectedObject> allAccessories)
+    {
+        var result = new AccessoryDetectionResult();
+
+        // Find accessories that are spatially associated with this person
+        // Using IoU and proximity-based association
+        foreach (var accessory in allAccessories)
+        {
+            if (IsAccessoryAssociatedWithPerson(personBox, accessory.BoundingBox))
+            {
+                // Map YOLO class to our accessory/clothing categories
+                var detectedItem = new DetectedItem(accessory.ObjectType, accessory.BoundingBox.Confidence);
+                
+                // Classify as accessory (backpack, handbag, suitcase are accessories)
+                if (accessory.ObjectType == "backpack" || accessory.ObjectType == "handbag" || 
+                    accessory.ObjectType == "suitcase" || accessory.ObjectType == "sports ball")
+                {
+                    result.Accessories.Add(detectedItem);
+                }
+                else if (accessory.ObjectType == "tie")
+                {
+                    // Tie can be considered clothing
+                    result.ClothingItems.Add(detectedItem);
+                }
+            }
+        }
+
+        _logger.LogDebug("Associated {AccessoryCount} accessories with person", result.Accessories.Count);
+        return result;
+    }
+
+    private bool IsAccessoryAssociatedWithPerson(BoundingBox personBox, BoundingBox accessoryBox)
+    {
+        // Check if accessory overlaps with person or is very close to person
+        // Method 1: Check IoU (Intersection over Union)
+        var iou = CalculateIoU(personBox, accessoryBox);
+        if (iou > 0.01f) // Even small overlap means association
+        {
+            return true;
+        }
+
+        // Method 2: Check if accessory is within extended person boundary
+        // Accessories like backpacks may extend slightly beyond person box
+        var extendedPersonBox = new BoundingBox
+        {
+            X = personBox.X - personBox.Width * 0.2f,
+            Y = personBox.Y - personBox.Height * 0.1f,
+            Width = personBox.Width * 1.4f,
+            Height = personBox.Height * 1.2f
+        };
+
+        var accessoryCenterX = accessoryBox.X + accessoryBox.Width / 2;
+        var accessoryCenterY = accessoryBox.Y + accessoryBox.Height / 2;
+
+        return accessoryCenterX >= extendedPersonBox.X &&
+               accessoryCenterX <= extendedPersonBox.X + extendedPersonBox.Width &&
+               accessoryCenterY >= extendedPersonBox.Y &&
+               accessoryCenterY <= extendedPersonBox.Y + extendedPersonBox.Height;
+    }
+
+    private float CalculateIoU(BoundingBox box1, BoundingBox box2)
+    {
+        var x1 = Math.Max(box1.X, box2.X);
+        var y1 = Math.Max(box1.Y, box2.Y);
+        var x2 = Math.Min(box1.X + box1.Width, box2.X + box2.Width);
+        var y2 = Math.Min(box1.Y + box1.Height, box2.Y + box2.Height);
+
+        var intersectionArea = Math.Max(0, x2 - x1) * Math.Max(0, y2 - y1);
+        var box1Area = box1.Width * box1.Height;
+        var box2Area = box2.Width * box2.Height;
+        var unionArea = box1Area + box2Area - intersectionArea;
+
+        return unionArea > 0 ? intersectionArea / unionArea : 0;
+    }
+
     public bool MatchesCriteria(AccessoryDetectionResult detectionResult, List<string> searchClothing, List<string> searchAccessories)
     {
         if (searchClothing.Count == 0 && searchAccessories.Count == 0)
