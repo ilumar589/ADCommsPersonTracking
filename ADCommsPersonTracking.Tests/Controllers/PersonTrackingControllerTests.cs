@@ -394,12 +394,11 @@ public class PersonTrackingControllerTests
 
     private IFormFile CreateMockFormFile(string fileName, string contentType, byte[] content)
     {
-        var stream = new MemoryStream(content);
         var formFile = new Mock<IFormFile>();
         formFile.Setup(f => f.FileName).Returns(fileName);
         formFile.Setup(f => f.ContentType).Returns(contentType);
         formFile.Setup(f => f.Length).Returns(content.Length);
-        formFile.Setup(f => f.OpenReadStream()).Returns(stream);
+        formFile.Setup(f => f.OpenReadStream()).Returns(() => new MemoryStream(content));
         return formFile.Object;
     }
 

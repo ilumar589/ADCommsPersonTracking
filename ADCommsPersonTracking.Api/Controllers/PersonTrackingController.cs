@@ -10,6 +10,8 @@ namespace ADCommsPersonTracking.Api.Controllers;
 [Route("api/[controller]")]
 public class PersonTrackingController : ControllerBase
 {
+    private const int TrackingIdHashLength = 32;
+    
     private readonly IPersonTrackingService _trackingService;
     private readonly ILogger<PersonTrackingController> _logger;
     private readonly IVideoProcessingService _videoProcessingService;
@@ -266,7 +268,7 @@ public class PersonTrackingController : ControllerBase
     private string GenerateDeterministicTrackingId(string videoName)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(videoName));
-        var hashString = Convert.ToHexString(hash).ToLowerInvariant()[..32];
+        var hashString = Convert.ToHexString(hash).ToLowerInvariant()[..TrackingIdHashLength];
         return $"video_{hashString}";
     }
 }
