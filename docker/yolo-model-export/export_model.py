@@ -2,6 +2,7 @@
 """Export YOLO11n model to ONNX format."""
 
 from pathlib import Path
+import shutil
 from ultralytics import YOLO
 
 model_dir = Path("/models")
@@ -19,7 +20,7 @@ else:
     
     exported = Path("yolo11n.onnx")
     if exported.exists():
-        exported.rename(model_path)
+        shutil.move(str(exported), str(model_path))
         size_mb = model_path.stat().st_size / (1024 * 1024)
         print(f"Model exported to {model_path} ({size_mb:.1f} MB)")
     else:
