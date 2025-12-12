@@ -199,7 +199,9 @@ This creates the `models/` directory in the repository root where the exported m
 
 #### 4. Run the Container to Export the Model
 
-Run the appropriate command for your operating system to start the container with a volume mount:
+Run the appropriate command for your operating system to start the container with a volume mount.
+
+**Note:** These commands assume you are still in the `docker/yolo-model-export` directory from step 1. The relative paths `../../models` will mount the `models/` directory from the repository root.
 
 **Linux/macOS:**
 ```bash
@@ -207,12 +209,12 @@ docker run --rm -v "$(pwd)/../../models:/models" yolo-model-export:latest
 ```
 
 **Windows PowerShell:**
-```bash
+```powershell
 docker run --rm -v "${PWD}/../../models:/models" yolo-model-export:latest
 ```
 
 **Windows Command Prompt:**
-```bash
+```cmd
 docker run --rm -v "%cd%/../../models:/models" yolo-model-export:latest
 ```
 
@@ -224,12 +226,12 @@ ls -la ../../models/yolo11n.onnx
 ```
 
 **Windows PowerShell:**
-```bash
+```powershell
 Get-ChildItem ../../models/yolo11n.onnx
 ```
 
 **Windows Command Prompt:**
-```bash
+```cmd
 dir ..\..\models\yolo11n.onnx
 ```
 
