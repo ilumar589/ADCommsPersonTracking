@@ -1,5 +1,3 @@
-using System.IO;
-
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Read YOLO11 configuration from appsettings
