@@ -16,6 +16,14 @@ public interface IAccessoryDetectionService
     Task<AccessoryDetectionResult> DetectAccessoriesAsync(byte[] imageBytes, BoundingBox personBox);
 
     /// <summary>
+    /// Detect accessories for a person using YOLO-detected accessories.
+    /// </summary>
+    /// <param name="personBox">The bounding box of the person</param>
+    /// <param name="allAccessories">All accessories detected in the image by YOLO</param>
+    /// <returns>Detected accessories associated with this person</returns>
+    AccessoryDetectionResult DetectAccessoriesFromYolo(BoundingBox personBox, List<DetectedObject> allAccessories);
+
+    /// <summary>
     /// Check if detected items match the search criteria.
     /// </summary>
     /// <param name="detectionResult">The detection result</param>

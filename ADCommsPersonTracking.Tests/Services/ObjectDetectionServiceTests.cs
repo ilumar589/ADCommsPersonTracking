@@ -189,4 +189,51 @@ public class ObjectDetectionServiceTests
 
         return result;
     }
+
+    [Fact]
+    public async Task DetectObjectsAsync_WithoutModel_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var imageBytes = CreateTestImage(640, 480);
+
+        // Act
+        var act = async () => await _service.DetectObjectsAsync(imageBytes);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Inference session is not initialized*");
+    }
+
+    [Fact]
+    public async Task DetectObjectsAsync_WithInvalidImageBytes_ThrowsException()
+    {
+        // Arrange
+        var invalidBytes = new byte[] { 1, 2, 3, 4, 5 };
+
+        // Act
+        var act = async () => await _service.DetectObjectsAsync(invalidBytes);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Inference session is not initialized*");
+    }
+
+    [Fact]
+    public void DetectedObject_ShouldHaveCorrectProperties()
+    {
+        // Arrange & Act
+        var detectedObject = new DetectedObject
+        {
+            ClassId = 24,
+            ObjectType = "backpack",
+            BoundingBox = new BoundingBox { X = 100, Y = 100, Width = 50, Height = 50, Confidence = 0.85f, Label = "backpack" }
+        };
+
+        // Assert
+        detectedObject.ClassId.Should().Be(24);
+        detectedObject.ObjectType.Should().Be("backpack");
+        detectedObject.BoundingBox.Should().NotBeNull();
+        detectedObject.BoundingBox.Label.Should().Be("backpack");
+        detectedObject.BoundingBox.Confidence.Should().Be(0.85f);
+    }
 }

@@ -199,6 +199,149 @@ public class AccessoryDetectionServiceTests
         item.Confidence.Should().Be(0f);
     }
 
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithOverlappingBackpack_ShouldAssociateBackpack()
+    {
+        // Arrange
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>
+        {
+            new DetectedObject
+            {
+                ClassId = 24,
+                ObjectType = "backpack",
+                BoundingBox = new BoundingBox { X = 150, Y = 120, Width = 60, Height = 80, Confidence = 0.85f, Label = "backpack" }
+            }
+        };
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Accessories.Should().HaveCount(1);
+        result.Accessories[0].Label.Should().Be("backpack");
+        result.Accessories[0].Confidence.Should().Be(0.85f);
+    }
+
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithMultipleAccessories_ShouldAssociateAll()
+    {
+        // Arrange
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>
+        {
+            new DetectedObject
+            {
+                ClassId = 24,
+                ObjectType = "backpack",
+                BoundingBox = new BoundingBox { X = 150, Y = 120, Width = 60, Height = 80, Confidence = 0.85f, Label = "backpack" }
+            },
+            new DetectedObject
+            {
+                ClassId = 26,
+                ObjectType = "handbag",
+                BoundingBox = new BoundingBox { X = 110, Y = 200, Width = 40, Height = 50, Confidence = 0.75f, Label = "handbag" }
+            }
+        };
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Accessories.Should().HaveCount(2);
+        result.Accessories.Should().Contain(a => a.Label == "backpack");
+        result.Accessories.Should().Contain(a => a.Label == "handbag");
+    }
+
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithDistantAccessory_ShouldNotAssociate()
+    {
+        // Arrange
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>
+        {
+            new DetectedObject
+            {
+                ClassId = 24,
+                ObjectType = "backpack",
+                BoundingBox = new BoundingBox { X = 500, Y = 500, Width = 60, Height = 80, Confidence = 0.85f, Label = "backpack" }
+            }
+        };
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Accessories.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithTie_ShouldAddAsClothingItem()
+    {
+        // Arrange
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>
+        {
+            new DetectedObject
+            {
+                ClassId = 27,
+                ObjectType = "tie",
+                BoundingBox = new BoundingBox { X = 150, Y = 120, Width = 20, Height = 60, Confidence = 0.80f, Label = "tie" }
+            }
+        };
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.ClothingItems.Should().HaveCount(1);
+        result.ClothingItems[0].Label.Should().Be("tie");
+    }
+
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithNoAccessories_ShouldReturnEmpty()
+    {
+        // Arrange
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>();
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Accessories.Should().BeEmpty();
+        result.ClothingItems.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DetectAccessoriesFromYolo_WithBackpackBehindPerson_ShouldAssociate()
+    {
+        // Arrange - backpack slightly behind/overlapping person
+        var personBox = new BoundingBox { X = 100, Y = 100, Width = 120, Height = 280, Confidence = 0.9f, Label = "person" };
+        var allAccessories = new List<DetectedObject>
+        {
+            new DetectedObject
+            {
+                ClassId = 24,
+                ObjectType = "backpack",
+                BoundingBox = new BoundingBox { X = 90, Y = 120, Width = 50, Height = 70, Confidence = 0.85f, Label = "backpack" }
+            }
+        };
+
+        // Act
+        var result = _service.DetectAccessoriesFromYolo(personBox, allAccessories);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Accessories.Should().HaveCount(1);
+        result.Accessories[0].Label.Should().Be("backpack");
+    }
+
     private byte[] CreateTestImage(int width, int height)
     {
         using var image = new Image<Rgb24>(width, height);
