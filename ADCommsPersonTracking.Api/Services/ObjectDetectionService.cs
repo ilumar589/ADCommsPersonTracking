@@ -232,6 +232,10 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
         // YOLO11 output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
         int numDetections = dims.Length > 2 ? dims[2] : MaxDetections;
         
+        int personCount = 0;
+        int accessoryCount = 0;
+        int backpacksFiltered = 0;
+        
         for (int i = 0; i < numDetections; i++)
         {
             // Get class scores (skip first 4 bbox coordinates)
@@ -248,9 +252,24 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
                 }
             }
 
+            // Log potential detections for persons and accessories (even if filtered)
+            if (maxClass == 0 || AccessoryClassIds.Contains(maxClass))
+            {
+                var threshold = maxClass == 0 ? ConfidenceThreshold : _accessoryConfidenceThreshold;
+                var passes = maxScore >= threshold;
+                _logger.LogRawYoloDetection(maxClass, maxScore, threshold, passes);
+                
+                // Specifically track backpack filtering
+                if (maxClass == 24 && !passes)
+                {
+                    _logger.LogBackpackFilteredByConfidence(maxScore, threshold);
+                    backpacksFiltered++;
+                }
+            }
+
             // Check if it's a person (class 0) or an accessory class and meets confidence threshold
-            var threshold = maxClass == 0 ? ConfidenceThreshold : _accessoryConfidenceThreshold;
-            if ((maxClass == 0 || AccessoryClassIds.Contains(maxClass)) && maxScore >= threshold)
+            var detectionThreshold = maxClass == 0 ? ConfidenceThreshold : _accessoryConfidenceThreshold;
+            if ((maxClass == 0 || AccessoryClassIds.Contains(maxClass)) && maxScore >= detectionThreshold)
             {
                 var cx = output[0, 0, i];
                 var cy = output[0, 1, i];
@@ -279,7 +298,17 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
                         Label = label
                     }
                 });
+                
+                if (maxClass == 0) personCount++;
+                else if (AccessoryClassIds.Contains(maxClass)) accessoryCount++;
             }
+        }
+
+        _logger.LogYoloParsingComplete(numDetections, personCount, accessoryCount);
+        
+        if (backpacksFiltered > 0)
+        {
+            _logger.LogInformation("Filtered out {BackpackCount} backpack detections due to low confidence", backpacksFiltered);
         }
 
         // Apply Non-Maximum Suppression per class

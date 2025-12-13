@@ -158,6 +158,13 @@ public class PersonTrackingService : IPersonTrackingService
 
                             _logger.LogYoloDetectionSummary(imageIndex, allObjects.Count, detections.Count, allAccessories.Count);
                             
+                            // Log warning if searching for accessories but none found
+                            if (allAccessories.Count == 0 && (searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0))
+                            {
+                                var searchedItems = string.Join(", ", searchCriteria.Accessories.Concat(searchCriteria.ClothingItems));
+                                _logger.LogNoAccessoriesDetectedWarning(imageIndex, searchedItems);
+                            }
+                            
                             lock (resultsLock)
                             {
                                 totalAccessoriesDetected += allAccessories.Count;

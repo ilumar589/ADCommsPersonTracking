@@ -380,4 +380,35 @@ public static partial class LogMessages
     public static partial void LogTrackingIdsRetrievalError(
         this ILogger logger,
         Exception ex);
+
+    // ObjectDetection - Detailed YOLO output logging
+    [LoggerMessage(
+        EventId = 45,
+        Level = LogLevel.Debug,
+        Message = "Raw YOLO detection: classId={ClassId}, maxScore={MaxScore:F4}, threshold={Threshold:F4}, passes={Passes}")]
+    public static partial void LogRawYoloDetection(
+        this ILogger logger,
+        int classId,
+        float maxScore,
+        float threshold,
+        bool passes);
+
+    [LoggerMessage(
+        EventId = 46,
+        Level = LogLevel.Information,
+        Message = "YOLO parsing complete: {TotalProcessed} detections processed, {PersonCount} persons, {AccessoryCount} accessories passed thresholds")]
+    public static partial void LogYoloParsingComplete(
+        this ILogger logger,
+        int totalProcessed,
+        int personCount,
+        int accessoryCount);
+
+    [LoggerMessage(
+        EventId = 47,
+        Level = LogLevel.Debug,
+        Message = "Potential backpack detection filtered: confidence={Confidence:F4}, threshold={Threshold:F4}")]
+    public static partial void LogBackpackFilteredByConfidence(
+        this ILogger logger,
+        float confidence,
+        float threshold);
 }
