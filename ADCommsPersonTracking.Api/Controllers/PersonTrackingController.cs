@@ -17,19 +17,22 @@ public class PersonTrackingController : ControllerBase
     private readonly IVideoProcessingService _videoProcessingService;
     private readonly IFrameStorageService _frameStorageService;
     private readonly IVideoCacheService _videoCacheService;
+    private readonly IVideoUploadJobService _videoUploadJobService;
 
     public PersonTrackingController(
         IPersonTrackingService trackingService,
         ILogger<PersonTrackingController> logger,
         IVideoProcessingService videoProcessingService,
         IFrameStorageService frameStorageService,
-        IVideoCacheService videoCacheService)
+        IVideoCacheService videoCacheService,
+        IVideoUploadJobService videoUploadJobService)
     {
         _trackingService = trackingService;
         _logger = logger;
         _videoProcessingService = videoProcessingService;
         _frameStorageService = frameStorageService;
         _videoCacheService = videoCacheService;
+        _videoUploadJobService = videoUploadJobService;
     }
 
     /// <summary>
@@ -100,20 +103,83 @@ public class PersonTrackingController : ControllerBase
     /// Upload a video file, extract frames, and store them in Azure Blob Storage
     /// </summary>
     /// <param name="video">Video file to process</param>
-    /// <returns>Video upload response with tracking ID and frame count</returns>
+    /// <returns>Video upload job response with job ID for tracking progress</returns>
     [HttpPost("video/upload")]
-    [ProducesResponseType(typeof(VideoUploadResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(VideoUploadJobResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<VideoUploadResponse>> UploadVideo(IFormFile video)
+    public async Task<ActionResult<VideoUploadJobResponse>> UploadVideo(IFormFile video)
     {
         if (video == null || video.Length == 0)
         {
             return BadRequest("Video file is required");
         }
 
+        var videoName = video.FileName;
+        
+        // Create a job entry
+        var job = _videoUploadJobService.CreateJob();
+        _videoUploadJobService.UpdateProgress(job.JobId, 0, "Receiving video file");
+
+        // Save video to temp file for background processing
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"{job.JobId}_{videoName}");
+        
         try
         {
-            var videoName = video.FileName;
+            using (var fileStream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+            {
+                await video.CopyToAsync(fileStream);
+            }
+            _videoUploadJobService.UpdateProgress(job.JobId, 5, "Video file received");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving video file for job {JobId}", job.JobId);
+            _videoUploadJobService.FailJob(job.JobId, "Failed to save video file");
+            
+            // Clean up temp file if it exists
+            if (System.IO.File.Exists(tempFilePath))
+            {
+                System.IO.File.Delete(tempFilePath);
+            }
+            
+            return StatusCode(500, "Failed to save video file");
+        }
+
+        // Start background processing
+        _ = Task.Run(async () => await ProcessVideoInBackground(job.JobId, videoName, tempFilePath));
+
+        return Ok(new VideoUploadJobResponse
+        {
+            JobId = job.JobId,
+            Message = "Video upload started. Use the job ID to check progress."
+        });
+    }
+
+    /// <summary>
+    /// Get the status of a video upload job
+    /// </summary>
+    /// <param name="jobId">The job ID</param>
+    /// <returns>Video upload job status</returns>
+    [HttpGet("video/upload/status/{jobId}")]
+    [ProducesResponseType(typeof(VideoUploadJob), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<VideoUploadJob> GetUploadStatus(string jobId)
+    {
+        var job = _videoUploadJobService.GetJob(jobId);
+        
+        if (job == null)
+        {
+            return NotFound($"Job with ID '{jobId}' not found");
+        }
+
+        return Ok(job);
+    }
+
+    private async Task ProcessVideoInBackground(string jobId, string videoName, string tempFilePath)
+    {
+        try
+        {
+            _videoUploadJobService.UpdateProgress(jobId, 5, "Checking cache");
             
             // Check cache for existing video
             var cachedTrackingId = await _videoCacheService.GetTrackingIdByVideoNameAsync(videoName);
@@ -121,47 +187,75 @@ public class PersonTrackingController : ControllerBase
             {
                 // Video already processed, return cached tracking ID
                 _logger.LogInformation("Returning cached tracking ID for video: {VideoName}", videoName);
+                _videoUploadJobService.CompleteJob(jobId, cachedTrackingId, 0);
                 
-                return Ok(new VideoUploadResponse
+                // Clean up temp file
+                if (System.IO.File.Exists(tempFilePath))
                 {
-                    TrackingId = cachedTrackingId,
-                    FrameCount = 0, // Not recounting frames from cache
-                    WasCached = true,
-                    Message = "Video already processed. Returning existing tracking ID."
-                });
+                    System.IO.File.Delete(tempFilePath);
+                }
+                
+                return;
             }
 
-            // Extract frames from video
+            _videoUploadJobService.UpdateProgress(jobId, 10, "Extracting frames");
             _logger.LogInformation("Processing new video: {VideoName}", videoName);
             
-            using var stream = video.OpenReadStream();
-            var frames = await _videoProcessingService.ExtractFramesAsync(stream, videoName);
+            // Extract frames from video
+            using var fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read);
+            var frames = await _videoProcessingService.ExtractFramesAsync(fileStream, videoName);
+
+            _videoUploadJobService.UpdateProgress(jobId, 50, "Uploading frames to storage");
 
             // Generate deterministic tracking ID based on video filename
             var trackingId = GenerateDeterministicTrackingId(videoName);
 
-            // Upload frames to blob storage
-            await _frameStorageService.UploadFramesAsync(trackingId, frames);
+            // Upload frames to blob storage with progress updates
+            await UploadFramesWithProgress(jobId, trackingId, frames);
 
+            _videoUploadJobService.UpdateProgress(jobId, 90, "Caching tracking ID");
+            
             // Cache the video name -> tracking ID mapping
             await _videoCacheService.SetTrackingIdForVideoAsync(videoName, trackingId);
 
+            _videoUploadJobService.UpdateProgress(jobId, 95, "Finalizing");
             _logger.LogInformation("Successfully processed video {VideoName} with tracking ID {TrackingId}", 
                 videoName, trackingId);
 
-            return Ok(new VideoUploadResponse
-            {
-                TrackingId = trackingId,
-                FrameCount = frames.Count,
-                WasCached = false,
-                Message = $"Video processed successfully. Extracted {frames.Count} frames."
-            });
+            _videoUploadJobService.CompleteJob(jobId, trackingId, frames.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing video upload");
-            return StatusCode(500, "Internal server error while processing video");
+            _logger.LogError(ex, "Error processing video upload for job {JobId}", jobId);
+            _videoUploadJobService.FailJob(jobId, ex.Message);
         }
+        finally
+        {
+            // Clean up temp file
+            if (System.IO.File.Exists(tempFilePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete temp file {TempFilePath}", tempFilePath);
+                }
+            }
+        }
+    }
+
+    private async Task UploadFramesWithProgress(string jobId, string trackingId, List<byte[]> frames)
+    {
+        // Upload frames and update progress incrementally
+        var totalFrames = frames.Count;
+        
+        // Use the existing method but wrap it to report progress
+        await _frameStorageService.UploadFramesAsync(trackingId, frames);
+        
+        // Since UploadFramesAsync doesn't provide incremental progress, we just complete at 90%
+        _videoUploadJobService.UpdateProgress(jobId, 90, $"Uploaded {totalFrames} frames to storage");
     }
 
     /// <summary>
