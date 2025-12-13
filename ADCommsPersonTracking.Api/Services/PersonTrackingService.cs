@@ -45,6 +45,10 @@ public class PersonTrackingService : IPersonTrackingService
 
     public async Task<TrackingResponse> ProcessFrameAsync(TrackingRequest request)
     {
+        var diagnosticsSessionId = request.DiagnosticsSessionId;
+        var hasDiagnostics = !string.IsNullOrEmpty(diagnosticsSessionId) && _diagnosticsService.IsEnabled;
+        var startTime = DateTime.UtcNow;
+        
         try
         {
             _logger.LogProcessFrameStart(request.ImagesBase64.Count, request.Prompt);
@@ -52,6 +56,12 @@ public class PersonTrackingService : IPersonTrackingService
 
             // Extract search features from the prompt using rule-based extraction
             var searchCriteria = _featureExtractor.ExtractFeatures(request.Prompt);
+            
+            // Record extracted criteria in diagnostics
+            if (hasDiagnostics)
+            {
+                _diagnosticsService.SetSearchCriteria(diagnosticsSessionId!, searchCriteria);
+            }
             var searchFeatures = new List<string>();
             searchFeatures.AddRange(searchCriteria.Colors);
             searchFeatures.AddRange(searchCriteria.ClothingItems);
@@ -71,6 +81,7 @@ public class PersonTrackingService : IPersonTrackingService
 
             var totalDetections = 0;
             var totalMatchedDetections = 0;
+            var totalAccessoriesDetected = 0;
             var resultsLock = new object();
 
             // Check if we have any criteria
@@ -133,6 +144,11 @@ public class PersonTrackingService : IPersonTrackingService
                             allAccessories = allObjects.Where(o => o.ClassId != 0).ToList();
 
                             _logger.LogYoloDetectionSummary(imageIndex, allObjects.Count, detections.Count, allAccessories.Count);
+                            
+                            lock (resultsLock)
+                            {
+                                totalAccessoriesDetected += allAccessories.Count;
+                            }
 
                             // Log each YOLO detection
                             foreach (var obj in allObjects)
@@ -346,6 +362,21 @@ public class PersonTrackingService : IPersonTrackingService
 
             _logger.LogMatchedDetections(totalMatchedDetections, totalDetections);
             _logger.LogProcessingComplete(totalDetections, totalMatchedDetections, string.Join("; ", criteriaDescription));
+            
+            // Record processing summary in diagnostics
+            if (hasDiagnostics)
+            {
+                var processingDuration = DateTime.UtcNow - startTime;
+                var summary = new ProcessingSummary
+                {
+                    TotalImagesProcessed = request.ImagesBase64.Count,
+                    TotalPersonsDetected = totalDetections,
+                    TotalAccessoriesDetected = totalAccessoriesDetected,
+                    PersonsMatchingCriteria = totalMatchedDetections,
+                    ProcessingDuration = processingDuration
+                };
+                _diagnosticsService.SetProcessingSummary(diagnosticsSessionId!, summary);
+            }
             
             return response;
         }

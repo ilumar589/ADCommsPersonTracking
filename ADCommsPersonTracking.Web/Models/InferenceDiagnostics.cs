@@ -7,6 +7,9 @@ public class InferenceDiagnostics
     public DateTime Timestamp { get; set; }
     public string TrackingId { get; set; } = string.Empty;
     public string Prompt { get; set; } = string.Empty;
+    public string RawPrompt { get; set; } = string.Empty;
+    public int FramesRetrieved { get; set; }
+    public List<string> Warnings { get; set; } = new();
     public List<DiagnosticLogEntry> LogEntries { get; set; } = new();
     public SearchCriteriaDiagnostics ExtractedCriteria { get; set; } = new();
     public List<ImageProcessingDiagnostics> ImageResults { get; set; } = new();

@@ -35,6 +35,16 @@ public interface IInferenceDiagnosticsService
     void SetProcessingSummary(string sessionId, ProcessingSummary summary);
 
     /// <summary>
+    /// Record frame retrieval information
+    /// </summary>
+    void RecordFrameRetrieval(string sessionId, int frameCount, bool success, string? errorMessage = null);
+
+    /// <summary>
+    /// Add a warning to the diagnostics session
+    /// </summary>
+    void AddWarning(string sessionId, string warning);
+
+    /// <summary>
     /// Get diagnostics for a session
     /// </summary>
     InferenceDiagnostics? GetDiagnostics(string sessionId);

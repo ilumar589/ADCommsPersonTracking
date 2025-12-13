@@ -161,6 +161,18 @@ public partial class PromptFeatureExtractor : IPromptFeatureExtractor
         // Extract height
         criteria.Height = ExtractHeight(prompt);
 
+        // Check if any criteria were found
+        var hasCriteria = criteria.Colors.Count > 0 || 
+                         criteria.ClothingItems.Count > 0 || 
+                         criteria.Accessories.Count > 0 || 
+                         criteria.PhysicalAttributes.Count > 0 ||
+                         criteria.Height != null;
+
+        if (!hasCriteria)
+        {
+            _logger.LogWarning("No specific search criteria found in prompt: '{Prompt}'. The prompt did not contain recognized colors, clothing, accessories, physical attributes, or height information.", prompt);
+        }
+
         // Log final search criteria
         _logger.LogFinalSearchCriteria(
             string.Join(", ", criteria.Colors),
