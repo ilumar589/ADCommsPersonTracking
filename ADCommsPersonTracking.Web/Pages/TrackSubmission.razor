@@ -257,6 +257,8 @@
 @implements IDisposable
 
 @code {
+    private const int PollingIntervalMs = 1500;
+    
     private string _imageBase64 = string.Empty;
     private string _fileName = string.Empty;
     private string _prompt = string.Empty;
@@ -411,7 +413,7 @@
         {
             try
             {
-                await Task.Delay(1500, cancellationToken); // Poll every 1.5 seconds
+                await Task.Delay(PollingIntervalMs, cancellationToken);
                 
                 var status = await ApiService.GetTrackByIdStatusAsync(_currentTrackByIdJobId);
                 

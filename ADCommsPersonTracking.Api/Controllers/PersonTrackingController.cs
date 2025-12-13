@@ -400,14 +400,21 @@ public class PersonTrackingController : ControllerBase
 
     private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames)
     {
+        const int ConversionProgressWeight = 20; // 20% for conversion
+        const int ProcessingProgressWeight = 60; // 60% for actual processing
+        const int FinalizingProgressWeight = 20; // 20% for finalizing
+        
         try
         {
-            _trackByIdJobService.UpdateProgress(jobId, 0, "Converting frames");
+            var totalFrames = frames.Count;
+            
+            _trackByIdJobService.UpdateProgress(jobId, 0, "Converting frames to base64");
             
             // Convert frames to base64
             var imagesBase64 = frames.Select(f => Convert.ToBase64String(f)).ToList();
 
-            _trackByIdJobService.UpdateProgress(jobId, frames.Count / 4, "Processing frames with tracking service");
+            var framesAfterConversion = (int)(totalFrames * (ConversionProgressWeight / 100.0));
+            _trackByIdJobService.UpdateProgress(jobId, framesAfterConversion, "Processing frames with tracking service");
 
             // Create tracking request
             var trackingRequest = new TrackingRequest
@@ -417,12 +424,13 @@ public class PersonTrackingController : ControllerBase
                 Timestamp = request.Timestamp
             };
 
-            _trackByIdJobService.UpdateProgress(jobId, frames.Count / 2, "Analyzing detections");
+            var framesAfterProcessing = framesAfterConversion + (int)(totalFrames * (ProcessingProgressWeight / 100.0));
+            _trackByIdJobService.UpdateProgress(jobId, framesAfterProcessing, "Analyzing detections");
 
             // Process frames using existing tracking service
             var response = await _trackingService.ProcessFrameAsync(trackingRequest);
             
-            _trackByIdJobService.UpdateProgress(jobId, frames.Count, "Finalizing results");
+            _trackByIdJobService.UpdateProgress(jobId, totalFrames, "Finalizing results");
 
             _logger.LogInformation("Successfully processed track-by-id job {JobId} for tracking ID {TrackingId}", 
                 jobId, request.TrackingId);

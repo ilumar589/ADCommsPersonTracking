@@ -42,7 +42,9 @@ public class TrackByIdJobService : ITrackByIdJobService
             // Calculate percentage based on frames processed
             if (job.TotalFrames > 0)
             {
-                job.ProgressPercentage = (int)((processedFrames / (double)job.TotalFrames) * 100);
+                var percentage = (int)((processedFrames / (double)job.TotalFrames) * 100);
+                // Clamp percentage to 100 to prevent edge case overflow
+                job.ProgressPercentage = Math.Min(percentage, 100);
             }
             
             _logger.LogInformation("Updated job {JobId}: {ProcessedFrames}/{TotalFrames} frames ({Percentage}%) - {Step}", 
