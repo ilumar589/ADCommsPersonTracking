@@ -83,72 +83,91 @@
                                 <MudAlert Severity="Severity.Info" Class="mb-3">@_trackingResponse.ProcessingMessage</MudAlert>
                             }
 
-                            @foreach (var result in _trackingResponse.Results)
-                            {
-                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                            @{
+                                var matchedImages = _trackingResponse.Results
+                                    .Where(r => r.Detections.Any(d => d.MatchedCriteria.Any()))
+                                    .ToList();
+                                var unmatchedImages = _trackingResponse.Results
+                                    .Where(r => !r.Detections.Any() || r.Detections.All(d => !d.MatchedCriteria.Any()))
+                                    .ToList();
+                            }
+
+                            <MudExpansionPanels MultiExpansion="true">
+                                @if (matchedImages.Any())
                                 {
-                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
-                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
-                                              Alt="Annotated image" 
-                                              Elevation="1" 
-                                              Class="mb-3"
-                                              ObjectFit="ObjectFit.Contain"
-                                              Height="300" />
+                                    <MudExpansionPanel IsInitiallyExpanded="true">
+                                        <TitleContent>
+                                            <div class="d-flex align-center">
+                                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                                                <MudText>Matched Images (@matchedImages.Count)</MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            @foreach (var result in matchedImages)
+                                            {
+                                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                                                {
+                                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
+                                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
+                                                              Alt="Annotated image" 
+                                                              Elevation="1" 
+                                                              Class="mb-3"
+                                                              ObjectFit="ObjectFit.Contain"
+                                                              Height="300" />
+                                                }
+
+                                                @foreach (var detection in result.Detections.Where(d => d.MatchedCriteria.Any()))
+                                                {
+                                                    <MudCard Elevation="1" Class="mb-2">
+                                                        <MudCardContent>
+                                                            <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                            <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                            <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                            <MudText Typo="Typo.body2">
+                                                                Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                            </MudText>
+                                                            <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
+                                                            <MudChipSet T="string">
+                                                                @foreach (var criteria in detection.MatchedCriteria)
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
+                                                                }
+                                                            </MudChipSet>
+                                                        </MudCardContent>
+                                                    </MudCard>
+                                                }
+                                            }
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
 
-                                @if (result.Detections.Any())
+                                @if (unmatchedImages.Any())
                                 {
-                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
-                                    var matchingDetections = detectionsByMatch[true];
-                                    var nonMatchingDetections = detectionsByMatch[false];
-                                    
-                                    <MudExpansionPanels MultiExpansion="true">
-                                        @if (matchingDetections.Any())
-                                        {
-                                            <MudExpansionPanel @bind-IsExpanded="_uploadMatchingPanelExpanded">
-                                                <TitleContent>
-                                                    <div class="d-flex align-center">
-                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
-                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
-                                                    </div>
-                                                </TitleContent>
-                                                <ChildContent>
-                                                    @foreach (var detection in matchingDetections)
-                                                    {
-                                                        <MudCard Elevation="1" Class="mb-2">
-                                                            <MudCardContent>
-                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
-                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
-                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
-                                                                <MudText Typo="Typo.body2">
-                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
-                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
-                                                                </MudText>
-                                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
-                                                                    <MudChipSet T="string">
-                                                                        @foreach (var criteria in detection.MatchedCriteria)
-                                                                        {
-                                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
-                                                                        }
-                                                                    </MudChipSet>
-                                                            </MudCardContent>
-                                                        </MudCard>
-                                                    }
-                                                </ChildContent>
-                                            </MudExpansionPanel>
-                                        }
-                                        
-                                        @if (nonMatchingDetections.Any())
-                                        {
-                                            <MudExpansionPanel @bind-IsExpanded="_uploadNonMatchingPanelExpanded">
-                                                <TitleContent>
-                                                    <div class="d-flex align-center">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
-                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
-                                                    </div>
-                                                </TitleContent>
-                                                <ChildContent>
-                                                    @foreach (var detection in nonMatchingDetections)
+                                    <MudExpansionPanel IsInitiallyExpanded="false">
+                                        <TitleContent>
+                                            <div class="d-flex align-center">
+                                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Default" Class="mr-2" />
+                                                <MudText>Unmatched Images (@unmatchedImages.Count)</MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            @foreach (var result in unmatchedImages)
+                                            {
+                                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                                                {
+                                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
+                                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
+                                                              Alt="Annotated image" 
+                                                              Elevation="1" 
+                                                              Class="mb-3"
+                                                              ObjectFit="ObjectFit.Contain"
+                                                              Height="300" />
+                                                }
+
+                                                @if (result.Detections.Any())
+                                                {
+                                                    @foreach (var detection in result.Detections)
                                                     {
                                                         <MudCard Elevation="1" Class="mb-2">
                                                             <MudCardContent>
@@ -162,15 +181,20 @@
                                                             </MudCardContent>
                                                         </MudCard>
                                                     }
-                                                </ChildContent>
-                                            </MudExpansionPanel>
-                                        }
-                                    </MudExpansionPanels>
+                                                }
+                                                else
+                                                {
+                                                    <MudAlert Severity="Severity.Warning">No detections found in this image.</MudAlert>
+                                                }
+                                            }
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
-                                else
-                                {
-                                    <MudAlert Severity="Severity.Warning">No detections found matching the prompt.</MudAlert>
-                                }
+                            </MudExpansionPanels>
+
+                            @if (!matchedImages.Any() && !unmatchedImages.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">No results available.</MudAlert>
                             }
                         </MudCardContent>
                     </MudCard>
@@ -257,72 +281,91 @@
                                 <MudAlert Severity="Severity.Info" Class="mb-3">@_trackingResponse.ProcessingMessage</MudAlert>
                             }
 
-                            @foreach (var result in _trackingResponse.Results)
-                            {
-                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                            @{
+                                var matchedImages = _trackingResponse.Results
+                                    .Where(r => r.Detections.Any(d => d.MatchedCriteria.Any()))
+                                    .ToList();
+                                var unmatchedImages = _trackingResponse.Results
+                                    .Where(r => !r.Detections.Any() || r.Detections.All(d => !d.MatchedCriteria.Any()))
+                                    .ToList();
+                            }
+
+                            <MudExpansionPanels MultiExpansion="true">
+                                @if (matchedImages.Any())
                                 {
-                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
-                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
-                                              Alt="Annotated image" 
-                                              Elevation="1" 
-                                              Class="mb-3"
-                                              ObjectFit="ObjectFit.Contain"
-                                              Height="300" />
+                                    <MudExpansionPanel IsInitiallyExpanded="true">
+                                        <TitleContent>
+                                            <div class="d-flex align-center">
+                                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                                                <MudText>Matched Images (@matchedImages.Count)</MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            @foreach (var result in matchedImages)
+                                            {
+                                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                                                {
+                                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
+                                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
+                                                              Alt="Annotated image" 
+                                                              Elevation="1" 
+                                                              Class="mb-3"
+                                                              ObjectFit="ObjectFit.Contain"
+                                                              Height="300" />
+                                                }
+
+                                                @foreach (var detection in result.Detections.Where(d => d.MatchedCriteria.Any()))
+                                                {
+                                                    <MudCard Elevation="1" Class="mb-2">
+                                                        <MudCardContent>
+                                                            <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                            <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                            <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                            <MudText Typo="Typo.body2">
+                                                                Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                            </MudText>
+                                                            <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
+                                                            <MudChipSet T="string">
+                                                                @foreach (var criteria in detection.MatchedCriteria)
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
+                                                                }
+                                                            </MudChipSet>
+                                                        </MudCardContent>
+                                                    </MudCard>
+                                                }
+                                            }
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
 
-                                @if (result.Detections.Any())
+                                @if (unmatchedImages.Any())
                                 {
-                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
-                                    var matchingDetections = detectionsByMatch[true];
-                                    var nonMatchingDetections = detectionsByMatch[false];
-                                    
-                                    <MudExpansionPanels MultiExpansion="true">
-                                        @if (matchingDetections.Any())
-                                        {
-                                            <MudExpansionPanel @bind-IsExpanded="_trackingMatchingPanelExpanded">
-                                                <TitleContent>
-                                                    <div class="d-flex align-center">
-                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
-                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
-                                                    </div>
-                                                </TitleContent>
-                                                <ChildContent>
-                                                    @foreach (var detection in matchingDetections)
-                                                    {
-                                                        <MudCard Elevation="1" Class="mb-2">
-                                                            <MudCardContent>
-                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
-                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
-                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
-                                                                <MudText Typo="Typo.body2">
-                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
-                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
-                                                                </MudText>
-                                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
-                                                                    <MudChipSet T="string">
-                                                                        @foreach (var criteria in detection.MatchedCriteria)
-                                                                        {
-                                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
-                                                                        }
-                                                                    </MudChipSet>
-                                                            </MudCardContent>
-                                                        </MudCard>
-                                                    }
-                                                </ChildContent>
-                                            </MudExpansionPanel>
-                                        }
-                                        
-                                        @if (nonMatchingDetections.Any())
-                                        {
-                                            <MudExpansionPanel @bind-IsExpanded="_trackingNonMatchingPanelExpanded">
-                                                <TitleContent>
-                                                    <div class="d-flex align-center">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
-                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
-                                                    </div>
-                                                </TitleContent>
-                                                <ChildContent>
-                                                    @foreach (var detection in nonMatchingDetections)
+                                    <MudExpansionPanel IsInitiallyExpanded="false">
+                                        <TitleContent>
+                                            <div class="d-flex align-center">
+                                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Default" Class="mr-2" />
+                                                <MudText>Unmatched Images (@unmatchedImages.Count)</MudText>
+                                            </div>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            @foreach (var result in unmatchedImages)
+                                            {
+                                                @if (!string.IsNullOrEmpty(result.AnnotatedImageBase64))
+                                                {
+                                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Annotated Image</MudText>
+                                                    <MudImage Src="@($"data:image/png;base64,{result.AnnotatedImageBase64}")" 
+                                                              Alt="Annotated image" 
+                                                              Elevation="1" 
+                                                              Class="mb-3"
+                                                              ObjectFit="ObjectFit.Contain"
+                                                              Height="300" />
+                                                }
+
+                                                @if (result.Detections.Any())
+                                                {
+                                                    @foreach (var detection in result.Detections)
                                                     {
                                                         <MudCard Elevation="1" Class="mb-2">
                                                             <MudCardContent>
@@ -336,15 +379,20 @@
                                                             </MudCardContent>
                                                         </MudCard>
                                                     }
-                                                </ChildContent>
-                                            </MudExpansionPanel>
-                                        }
-                                    </MudExpansionPanels>
+                                                }
+                                                else
+                                                {
+                                                    <MudAlert Severity="Severity.Warning">No detections found in this image.</MudAlert>
+                                                }
+                                            }
+                                        </ChildContent>
+                                    </MudExpansionPanel>
                                 }
-                                else
-                                {
-                                    <MudAlert Severity="Severity.Warning">No detections found matching the prompt.</MudAlert>
-                                }
+                            </MudExpansionPanels>
+
+                            @if (!matchedImages.Any() && !unmatchedImages.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">No results available.</MudAlert>
                             }
                         </MudCardContent>
                     </MudCard>
@@ -372,10 +420,6 @@
     private CancellationTokenSource? _pollingCancellation;
     private bool _enableDiagnostics = false;
     private string? _diagnosticsSessionId = null;
-    private bool _uploadMatchingPanelExpanded = true;
-    private bool _uploadNonMatchingPanelExpanded = false;
-    private bool _trackingMatchingPanelExpanded = true;
-    private bool _trackingNonMatchingPanelExpanded = false;
 
     [SupplyParameterFromQuery(Name = "trackingId")]
     public string? TrackingIdFromQuery { get; set; }
