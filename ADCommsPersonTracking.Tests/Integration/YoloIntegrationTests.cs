@@ -31,7 +31,7 @@ public class YoloIntegrationTests : IDisposable
             throw new InvalidOperationException("Could not find repository root directory");
         }
         
-        _modelPath = Path.Combine(repoRoot, "models", "yolo11m.onnx");
+        _modelPath = Path.Combine(repoRoot, "models", "yolo11x.onnx");
         _testDataPath = Path.Combine(repoRoot, "ADCommsPersonTracking.Tests", "TestData", "Images");
         
         // Skip tests if model doesn't exist

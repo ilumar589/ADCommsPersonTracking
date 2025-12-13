@@ -21,13 +21,13 @@ Create a Python script `export_yolo11.py`:
 ```python
 from ultralytics import YOLO
 
-# Download and load YOLO11 medium model (better accuracy)
-model = YOLO('yolo11m.pt')
+# Download and load YOLO11 extra-large model (best accuracy)
+model = YOLO('yolo11x.pt')
 
 # Export to ONNX format
 model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)
 
-print("YOLO11 model exported to yolo11m.onnx")
+print("YOLO11 model exported to yolo11x.onnx")
 ```
 
 Run the script:
@@ -42,7 +42,7 @@ This will download the YOLO11n model and export it to ONNX format.
 
 ```bash
 mkdir -p ADCommsPersonTracking.Api/models
-mv yolo11m.onnx ADCommsPersonTracking.Api/models/
+mv yolo11x.onnx ADCommsPersonTracking.Api/models/
 ```
 
 ### 5. Build and Run
@@ -102,11 +102,11 @@ curl -X POST http://localhost:5000/api/persontracking/track \
 |-------|------|-------|-----|----------|
 | yolo11n | 6 MB | Fastest | 44.2 | Old hardware, real-time |
 | yolo11s | 22 MB | Fast | 49.3 | Balanced |
-| yolo11m | 50 MB | Medium | 54.7 | Better accuracy (default, recommended) |
+| yolo11m | 50 MB | Medium | 54.7 | Better accuracy |
 | yolo11l | 102 MB | Slow | 57.2 | High accuracy |
-| yolo11x | 195 MB | Slowest | 58.8 | Best accuracy |
+| yolo11x | 195 MB | Slowest | 58.8 | Best accuracy (default, recommended) |
 
-**Default model**: `yolo11m` for better accessory detection
+**Default model**: `yolo11x` for best accessory detection
 **For old hardware**: Use `yolo11n` or `yolo11s`
 
 ### Export Any Variant
@@ -158,7 +158,7 @@ The system can be configured via `appsettings.json`:
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11m.onnx",
+    "ModelPath": "models/yolo11x.onnx",
     "ConfidenceThreshold": 0.45,
     "IouThreshold": 0.5
   },
@@ -186,7 +186,7 @@ The system can be configured via `appsettings.json`:
 **Solution**: Verify model path in `appsettings.json` and ensure the file exists:
 
 ```bash
-ls -la ADCommsPersonTracking.Api/models/yolo11m.onnx
+ls -la ADCommsPersonTracking.Api/models/yolo11x.onnx
 ```
 
 If the model is missing, the system will use mock detections for testing.
@@ -250,7 +250,7 @@ docker run -p 5000:80 adcomms-tracking
 ```bash
 export ASPNETCORE_ENVIRONMENT=Production
 export ASPNETCORE_URLS="http://+:5000"
-export ObjectDetection__ModelPath="/app/models/yolo11m.onnx"
+export ObjectDetection__ModelPath="/app/models/yolo11x.onnx"
 export ObjectDetection__ConfidenceThreshold="0.45"
 export ImageAnnotation__BoxColor="#00FF00"
 ```

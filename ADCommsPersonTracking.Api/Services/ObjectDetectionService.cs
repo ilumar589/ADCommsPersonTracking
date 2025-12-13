@@ -35,7 +35,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     public ObjectDetectionService(IConfiguration configuration, ILogger<ObjectDetectionService> logger)
     {
         _logger = logger;
-        _modelPath = configuration["ObjectDetection:ModelPath"] ?? "models/yolo11m.onnx";
+        _modelPath = configuration["ObjectDetection:ModelPath"] ?? "models/yolo11x.onnx";
         
         // Read accessory confidence threshold from configuration, default to 0.25
         _accessoryConfidenceThreshold = configuration.GetValue<float>("ObjectDetection:AccessoryConfidenceThreshold", 0.25f);

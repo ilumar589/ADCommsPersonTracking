@@ -6,9 +6,9 @@ Successfully implemented comprehensive YOLO11 ONNX model integration with Docker
 ## Deliverables
 
 ### 1. Model Download Infrastructure
-- **download-model.py**: Python script using Ultralytics to download and export YOLO11m ONNX model
+- **download-model.py**: Python script using Ultralytics to download and export YOLO11x ONNX model
 - **download-model.sh**: Alternative bash script for model download
-- Model stored in `models/yolo11m.onnx` (~50MB)
+- Model stored in `models/yolo11x.onnx` (~136MB)
 - Git LFS configuration in `.gitattributes` for model file tracking
 
 ### 2. Docker Infrastructure

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to download and export YOLO11m ONNX model from Ultralytics.
+Script to download and export YOLO11x ONNX model from Ultralytics.
 This script uses the Ultralytics Python package to download the PyTorch model
 and export it to ONNX format.
 """
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 def download_and_export_model():
-    """Download YOLO11m PyTorch model and export to ONNX format."""
+    """Download YOLO11x PyTorch model and export to ONNX format."""
     try:
         from ultralytics import YOLO
     except ImportError:
@@ -20,7 +20,7 @@ def download_and_export_model():
     
     # Define paths
     model_dir = Path("models")
-    model_path = model_dir / "yolo11m.onnx"
+    model_path = model_dir / "yolo11x.onnx"
     
     # Create models directory if it doesn't exist
     model_dir.mkdir(exist_ok=True)
@@ -31,17 +31,17 @@ def download_and_export_model():
         print(f"Model already exists at {model_path} ({size_mb:.1f} MB)")
         return
     
-    print("Downloading YOLO11m model and exporting to ONNX...")
+    print("Downloading YOLO11x model and exporting to ONNX...")
     print("This may take a few minutes...")
     
     # Load model (will download if not present)
-    model = YOLO('yolo11m.pt')
+    model = YOLO('yolo11x.pt')
     
     # Export to ONNX format
     model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)
     
     # Move the exported model to the models directory
-    exported_path = Path("yolo11m.onnx")
+    exported_path = Path("yolo11x.onnx")
     if exported_path.exists():
         exported_path.rename(model_path)
         size_mb = model_path.stat().st_size / (1024 * 1024)

@@ -40,7 +40,7 @@ The ADComms Person Tracking System is a .NET 10 web application designed to proc
 **Technology**: 
 - ONNX Runtime with YOLO11 models
 - Supports models: yolo11n (nano) to yolo11x (extra-large)
-- Default: yolo11m (medium) for better accessory detection
+- Default: yolo11x (extra-large) for best accessory detection
 - Local inference only - no HTTP calls
 
 **Process**:
@@ -162,7 +162,7 @@ TrackingResponse
     "ApiKey": "sk-ant-..."  // Required for LLM functionality
   },
   "ObjectDetection": {
-    "ModelPath": "models/yolo11m.onnx"  // Path to YOLO11 ONNX model
+    "ModelPath": "models/yolo11x.onnx"  // Path to YOLO11 ONNX model
   }
 }
 ```
@@ -171,7 +171,7 @@ TrackingResponse
 
 ```bash
 Anthropic__ApiKey="sk-ant-..."
-ObjectDetection__ModelPath="/path/to/yolo11m.onnx"
+ObjectDetection__ModelPath="/path/to/yolo11x.onnx"
 ```
 
 ## Deployment Options

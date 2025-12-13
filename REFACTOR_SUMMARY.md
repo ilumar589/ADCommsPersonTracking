@@ -106,7 +106,7 @@ New configuration in `appsettings.json`:
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11m.onnx",
+    "ModelPath": "models/yolo11x.onnx",
     "ConfidenceThreshold": 0.45,
     "IouThreshold": 0.5
   },
