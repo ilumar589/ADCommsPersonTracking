@@ -123,8 +123,6 @@
                                                                     Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
                                                                     [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
                                                                 </MudText>
-                                                                @if (detection.MatchedCriteria.Any())
-                                                                {
                                                                     <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
                                                                     <MudChipSet T="string">
                                                                         @foreach (var criteria in detection.MatchedCriteria)
@@ -132,7 +130,6 @@
                                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
                                                                         }
                                                                     </MudChipSet>
-                                                                }
                                                             </MudCardContent>
                                                         </MudCard>
                                                     }
@@ -299,8 +296,6 @@
                                                                     Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
                                                                     [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
                                                                 </MudText>
-                                                                @if (detection.MatchedCriteria.Any())
-                                                                {
                                                                     <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
                                                                     <MudChipSet T="string">
                                                                         @foreach (var criteria in detection.MatchedCriteria)
@@ -308,7 +303,6 @@
                                                                             <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
                                                                         }
                                                                     </MudChipSet>
-                                                                }
                                                             </MudCardContent>
                                                         </MudCard>
                                                     }
