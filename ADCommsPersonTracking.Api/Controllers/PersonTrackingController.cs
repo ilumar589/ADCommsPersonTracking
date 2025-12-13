@@ -19,6 +19,7 @@ public class PersonTrackingController : ControllerBase
     private readonly IVideoCacheService _videoCacheService;
     private readonly IVideoUploadJobService _videoUploadJobService;
     private readonly ITrackByIdJobService _trackByIdJobService;
+    private readonly IInferenceDiagnosticsService _diagnosticsService;
 
     public PersonTrackingController(
         IPersonTrackingService trackingService,
@@ -27,7 +28,8 @@ public class PersonTrackingController : ControllerBase
         IFrameStorageService frameStorageService,
         IVideoCacheService videoCacheService,
         IVideoUploadJobService videoUploadJobService,
-        ITrackByIdJobService trackByIdJobService)
+        ITrackByIdJobService trackByIdJobService,
+        IInferenceDiagnosticsService diagnosticsService)
     {
         _trackingService = trackingService;
         _logger = logger;
@@ -36,6 +38,7 @@ public class PersonTrackingController : ControllerBase
         _videoCacheService = videoCacheService;
         _videoUploadJobService = videoUploadJobService;
         _trackByIdJobService = trackByIdJobService;
+        _diagnosticsService = diagnosticsService;
     }
 
     /// <summary>
@@ -386,6 +389,85 @@ public class PersonTrackingController : ControllerBase
             _logger.LogError(ex, "Error retrieving tracking IDs");
             return StatusCode(500, "Internal server error");
         }
+    }
+
+    /// <summary>
+    /// Track persons using a previously uploaded video's tracking ID with diagnostics enabled
+    /// </summary>
+    /// <param name="request">Track by ID request with tracking ID and prompt</param>
+    /// <returns>Job response with job ID and diagnostics session ID</returns>
+    [HttpPost("track-by-id-with-diagnostics")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TrackByIdWithDiagnostics([FromBody] TrackByIdRequest request)
+    {
+        if (!_diagnosticsService.IsEnabled)
+        {
+            return BadRequest("Diagnostics is not enabled on this server");
+        }
+
+        // Start a diagnostics session
+        var diagnosticsSessionId = _diagnosticsService.StartSession(request.TrackingId, request.Prompt);
+
+        // Call the normal track-by-id endpoint
+        var result = await TrackById(request);
+
+        // End the diagnostics session
+        _diagnosticsService.EndSession(diagnosticsSessionId);
+
+        // If successful, include the diagnostics session ID in the response
+        if (result.Result is OkObjectResult okResult && okResult.Value is TrackByIdJobResponse jobResponse)
+        {
+            return Ok(new
+            {
+                jobResponse.JobId,
+                jobResponse.Message,
+                jobResponse.TotalFrames,
+                DiagnosticsSessionId = diagnosticsSessionId
+            });
+        }
+
+        return result.Result!;
+    }
+
+    /// <summary>
+    /// Get diagnostics for a specific session
+    /// </summary>
+    /// <param name="sessionId">The diagnostics session ID</param>
+    /// <returns>Inference diagnostics data</returns>
+    [HttpGet("diagnostics/{sessionId}")]
+    [ProducesResponseType(typeof(InferenceDiagnostics), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<InferenceDiagnostics> GetDiagnostics(string sessionId)
+    {
+        var diagnostics = _diagnosticsService.GetDiagnostics(sessionId);
+        
+        if (diagnostics == null)
+        {
+            return NotFound($"Diagnostics session with ID '{sessionId}' not found");
+        }
+
+        return Ok(diagnostics);
+    }
+
+    /// <summary>
+    /// Get the most recent diagnostics session
+    /// </summary>
+    /// <returns>Latest inference diagnostics data</returns>
+    [HttpGet("diagnostics/latest")]
+    [ProducesResponseType(typeof(InferenceDiagnostics), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<InferenceDiagnostics> GetLatestDiagnostics()
+    {
+        var diagnostics = _diagnosticsService.GetLatestDiagnostics();
+        
+        if (diagnostics == null)
+        {
+            return NotFound("No diagnostics sessions found");
+        }
+
+        return Ok(diagnostics);
     }
 
     /// <summary>

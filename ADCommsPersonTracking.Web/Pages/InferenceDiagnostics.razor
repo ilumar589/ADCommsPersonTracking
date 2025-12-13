@@ -1,0 +1,246 @@
+@page "/inference-diagnostics"
+@page "/inference-diagnostics/{SessionId}"
+@using ADCommsPersonTracking.Web.Models
+@inject IPersonTrackingApiService ApiService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Inference Diagnostics - ADComms Person Tracking</PageTitle>
+
+<MudText Typo="Typo.h3" Class="mb-4">Inference Diagnostics</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    <MudText Typo="Typo.body1" Class="mt-2">Loading diagnostics...</MudText>
+}
+else if (_diagnostics == null)
+{
+    <MudAlert Severity="Severity.Warning">No diagnostics data available. @_errorMessage</MudAlert>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadLatestDiagnostics" Class="mt-3">
+        Load Latest Diagnostics
+    </MudButton>
+}
+else
+{
+    <MudGrid>
+        <!-- Session Info -->
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-3">Session Information</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.body2"><strong>Session ID:</strong> @_diagnostics.SessionId</MudText>
+                        <MudText Typo="Typo.body2"><strong>Timestamp:</strong> @_diagnostics.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                        <MudText Typo="Typo.body2"><strong>Tracking ID:</strong> @_diagnostics.TrackingId</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.body2"><strong>Prompt:</strong></MudText>
+                        <MudPaper Elevation="1" Class="pa-2 mt-1" Style="background-color: #f5f5f5;">
+                            <MudText Typo="Typo.body2">@_diagnostics.Prompt</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Feature Extraction -->
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Class="mr-2"/>
+                    Extracted Search Criteria
+                </MudText>
+                @if (!_diagnostics.ExtractedCriteria.HasAnyCriteria)
+                {
+                    <MudAlert Severity="Severity.Info">No specific search criteria found in the prompt.</MudAlert>
+                }
+                else
+                {
+                    <MudGrid>
+                        @if (_diagnostics.ExtractedCriteria.Colors.Any())
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2"><strong>Colors:</strong></MudText>
+                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                    @foreach (var color in _diagnostics.ExtractedCriteria.Colors)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@color</MudChip>
+                                    }
+                                </div>
+                            </MudItem>
+                        }
+                        @if (_diagnostics.ExtractedCriteria.Accessories.Any())
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2"><strong>Accessories:</strong></MudText>
+                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                    @foreach (var accessory in _diagnostics.ExtractedCriteria.Accessories)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">@accessory</MudChip>
+                                    }
+                                </div>
+                            </MudItem>
+                        }
+                        @if (_diagnostics.ExtractedCriteria.ClothingItems.Any())
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2"><strong>Clothing:</strong></MudText>
+                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                    @foreach (var clothing in _diagnostics.ExtractedCriteria.ClothingItems)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@clothing</MudChip>
+                                    }
+                                </div>
+                            </MudItem>
+                        }
+                        @if (_diagnostics.ExtractedCriteria.PhysicalAttributes.Any())
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2"><strong>Physical Attributes:</strong></MudText>
+                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                    @foreach (var attr in _diagnostics.ExtractedCriteria.PhysicalAttributes)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@attr</MudChip>
+                                    }
+                                </div>
+                            </MudItem>
+                        }
+                        @if (!string.IsNullOrEmpty(_diagnostics.ExtractedCriteria.HeightInfo))
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2"><strong>Height:</strong></MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@_diagnostics.ExtractedCriteria.HeightInfo</MudChip>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- Processing Summary -->
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2"/>
+                    Processing Summary
+                </MudText>
+                <MudGrid>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Primary"><strong>Images Processed</strong></MudText>
+                        <MudText Typo="Typo.h5">@_diagnostics.Summary.TotalImagesProcessed</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Info"><strong>Persons Detected</strong></MudText>
+                        <MudText Typo="Typo.h5">@_diagnostics.Summary.TotalPersonsDetected</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Success"><strong>Persons Matching</strong></MudText>
+                        <MudText Typo="Typo.h5">@_diagnostics.Summary.PersonsMatchingCriteria</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Warning"><strong>Accessories Detected</strong></MudText>
+                        <MudText Typo="Typo.h5">@_diagnostics.Summary.TotalAccessoriesDetected</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Log Timeline -->
+        <MudItem xs="12">
+            <MudExpansionPanels MultiExpansion="true">
+                <MudExpansionPanel Text="Log Timeline" Icon="@Icons.Material.Filled.Timeline">
+                    <MudTable Items="@_diagnostics.LogEntries.OrderByDescending(l => l.Timestamp)" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Time</MudTh>
+                            <MudTh>Level</MudTh>
+                            <MudTh>Category</MudTh>
+                            <MudTh>Message</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Time">@context.Timestamp.ToString("HH:mm:ss.fff")</MudTd>
+                            <MudTd DataLabel="Level">
+                                <MudChip T="string" Size="Size.Small" Color="@GetLogLevelColor(context.Level)">@context.Level</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Category">@context.Category</MudTd>
+                            <MudTd DataLabel="Message">@context.Message</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter]
+    public string? SessionId { get; set; }
+
+    private Models.InferenceDiagnostics? _diagnostics;
+    private bool _loading = true;
+    private string _errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDiagnostics();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadDiagnostics();
+    }
+
+    private async Task LoadDiagnostics()
+    {
+        _loading = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(SessionId))
+            {
+                _diagnostics = await ApiService.GetDiagnosticsAsync(SessionId);
+                if (_diagnostics == null)
+                {
+                    _errorMessage = $"Diagnostics session '{SessionId}' not found.";
+                    Snackbar.Add(_errorMessage, Severity.Error);
+                }
+            }
+            else
+            {
+                _diagnostics = await ApiService.GetLatestDiagnosticsAsync();
+                if (_diagnostics == null)
+                {
+                    _errorMessage = "No diagnostics sessions available.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading diagnostics: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadLatestDiagnostics()
+    {
+        NavigationManager.NavigateTo("/inference-diagnostics");
+        await LoadDiagnostics();
+    }
+
+    private Color GetLogLevelColor(string level)
+    {
+        return level.ToLower() switch
+        {
+            "debug" => Color.Default,
+            "info" or "information" => Color.Info,
+            "warning" => Color.Warning,
+            "error" => Color.Error,
+            _ => Color.Default
+        };
+    }
+}

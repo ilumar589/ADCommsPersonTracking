@@ -13,6 +13,7 @@ public class PersonTrackingService : IPersonTrackingService
     private readonly IColorAnalysisService _colorAnalysisService;
     private readonly IAccessoryDetectionService _accessoryDetectionService;
     private readonly IPhysicalAttributeEstimator _physicalAttributeEstimator;
+    private readonly IInferenceDiagnosticsService _diagnosticsService;
     private readonly ILogger<PersonTrackingService> _logger;
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, PersonTrack> _activeTracks = new();
@@ -26,6 +27,7 @@ public class PersonTrackingService : IPersonTrackingService
         IColorAnalysisService colorAnalysisService,
         IAccessoryDetectionService accessoryDetectionService,
         IPhysicalAttributeEstimator physicalAttributeEstimator,
+        IInferenceDiagnosticsService diagnosticsService,
         IConfiguration configuration,
         ILogger<PersonTrackingService> logger)
     {
@@ -35,6 +37,7 @@ public class PersonTrackingService : IPersonTrackingService
         _colorAnalysisService = colorAnalysisService;
         _accessoryDetectionService = accessoryDetectionService;
         _physicalAttributeEstimator = physicalAttributeEstimator;
+        _diagnosticsService = diagnosticsService;
         _configuration = configuration;
         _logger = logger;
         _maxDegreeOfParallelism = configuration.GetValue("Processing:MaxDegreeOfParallelism", Environment.ProcessorCount);
@@ -44,6 +47,7 @@ public class PersonTrackingService : IPersonTrackingService
     {
         try
         {
+            _logger.LogProcessFrameStart(request.ImagesBase64.Count, request.Prompt);
             _logger.LogProcessingImages(request.ImagesBase64.Count, request.Prompt);
 
             // Extract search features from the prompt using rule-based extraction
@@ -76,6 +80,14 @@ public class PersonTrackingService : IPersonTrackingService
                              searchCriteria.PhysicalAttributes.Count > 0 ||
                              searchCriteria.Height != null;
 
+            _logger.LogCriteriaBreakdown(
+                hasCriteria,
+                searchCriteria.Colors.Count,
+                searchCriteria.ClothingItems.Count,
+                searchCriteria.Accessories.Count,
+                searchCriteria.PhysicalAttributes.Count,
+                searchCriteria.Height != null);
+
             // Process images in parallel
             var parallelOptions = new ParallelOptions 
             { 
@@ -95,16 +107,45 @@ public class PersonTrackingService : IPersonTrackingService
                         var imageIndex = imageData.Index;
                         var imageBytes = Convert.FromBase64String(imageBase64);
 
+                        // Get image dimensions first for logging
+                        int imageHeight, imageWidth;
+                        using (var ms = new MemoryStream(imageBytes))
+                        using (var image = await SixLabors.ImageSharp.Image.LoadAsync(ms, cancellationToken))
+                        {
+                            imageHeight = image.Height;
+                            imageWidth = image.Width;
+                        }
+
+                        _logger.LogImageProcessingStart(imageIndex, imageWidth, imageHeight, imageBase64.Length);
+
                         // Detect persons and accessories in the frame using YOLO11
                         // Only use new method if searching for accessories
                         List<BoundingBox> detections;
                         List<DetectedObject> allAccessories = new();
                         
-                        if (searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0)
+                        var takingAccessoryPath = searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0;
+                        _logger.LogAccessoryDetectionPath(imageIndex, takingAccessoryPath, searchCriteria.Accessories.Count, searchCriteria.ClothingItems.Count);
+                        
+                        if (takingAccessoryPath)
                         {
                             var allObjects = await _detectionService.DetectObjectsAsync(imageBytes);
                             detections = allObjects.Where(o => o.ClassId == 0).Select(o => o.BoundingBox).ToList();
                             allAccessories = allObjects.Where(o => o.ClassId != 0).ToList();
+
+                            _logger.LogYoloDetectionSummary(imageIndex, allObjects.Count, detections.Count, allAccessories.Count);
+
+                            // Log each YOLO detection
+                            foreach (var obj in allObjects)
+                            {
+                                _logger.LogYoloDetection(
+                                    obj.ClassId,
+                                    obj.ObjectType,
+                                    obj.BoundingBox.Confidence,
+                                    obj.BoundingBox.X,
+                                    obj.BoundingBox.Y,
+                                    obj.BoundingBox.Width,
+                                    obj.BoundingBox.Height);
+                            }
                         }
                         else
                         {
@@ -118,23 +159,17 @@ public class PersonTrackingService : IPersonTrackingService
                         
                         _logger.LogDetectedPersonsInImage(detections.Count, imageIndex);
 
-                        // Get image dimensions for physical attribute estimation
-                        int imageHeight, imageWidth;
-                        using (var ms = new MemoryStream(imageBytes))
-                        using (var image = await SixLabors.ImageSharp.Image.LoadAsync(ms, cancellationToken))
-                        {
-                            imageHeight = image.Height;
-                            imageWidth = image.Width;
-                        }
-
                     // Process detections in parallel within the image
-                    var detectionResults = new ConcurrentBag<(Detection detection, BoundingBox box)>();
+                    var detectionResults = new ConcurrentBag<(Detection detection, BoundingBox box, int personIndex)>();
 
                     await Parallel.ForEachAsync(
-                        detections,
+                        detections.Select((d, idx) => new { Detection = d, Index = idx }),
                         new ParallelOptions { MaxDegreeOfParallelism = _maxDegreeOfParallelism },
-                        async (detection, ct) =>
+                        async (detectionData, ct) =>
                         {
+                            var detection = detectionData.Detection;
+                            var idx = detectionData.Index;
+
                             // Analyze all attributes for this person in parallel
                             var colorTask = _colorAnalysisService.AnalyzePersonColorsAsync(imageBytes, detection);
                             var physicalTask = _physicalAttributeEstimator.EstimateAttributesAsync(imageBytes, detection, imageHeight, imageWidth);
@@ -143,6 +178,19 @@ public class PersonTrackingService : IPersonTrackingService
 
                             var colorProfile = await colorTask;
                             var physicalAttributes = await physicalTask;
+
+                            // Log color analysis results
+                            _logger.LogPersonColorAnalysis(
+                                idx,
+                                string.Join(", ", colorProfile.UpperBodyColors.Select(c => c.ColorName)),
+                                string.Join(", ", colorProfile.LowerBodyColors.Select(c => c.ColorName)),
+                                string.Join(", ", colorProfile.OverallColors.Select(c => c.ColorName)));
+
+                            // Log physical attributes
+                            _logger.LogPersonPhysicalAttributes(
+                                idx,
+                                string.Join(", ", physicalAttributes.AllAttributes),
+                                physicalAttributes.EstimatedHeightMeters);
                             
                             // Detect accessories using YOLO-detected accessories if available
                             AccessoryDetectionResult accessoryResult;
@@ -163,8 +211,13 @@ public class PersonTrackingService : IPersonTrackingService
                             var matchesPhysical = (searchCriteria.PhysicalAttributes.Count == 0 && searchCriteria.Height == null) ||
                                                  _physicalAttributeEstimator.MatchesCriteria(physicalAttributes, searchCriteria.PhysicalAttributes, searchCriteria.Height);
 
+                            var overallMatch = !hasCriteria || (matchesColors && matchesAccessories && matchesPhysical);
+
+                            // Log matching results
+                            _logger.LogPersonMatchingResult(idx, matchesColors, matchesAccessories, matchesPhysical, overallMatch);
+
                             // Include detection only if it matches all specified criteria
-                            if (!hasCriteria || (matchesColors && matchesAccessories && matchesPhysical))
+                            if (overallMatch)
                             {
                                 var trackingId = GetOrCreateTrackingId(detection, request.Timestamp);
                                 var matchedCriteria = new List<string>();
@@ -216,7 +269,7 @@ public class PersonTrackingService : IPersonTrackingService
                                     MatchedCriteria = matchedCriteria
                                 };
 
-                                detectionResults.Add((detectionResult, detection));
+                                detectionResults.Add((detectionResult, detection, idx));
 
                                 // Update tracking information
                                 UpdateTrack(trackingId, detection, searchFeatures, request.Timestamp);
@@ -225,6 +278,19 @@ public class PersonTrackingService : IPersonTrackingService
                                 {
                                     totalMatchedDetections++;
                                 }
+                            }
+                            else
+                            {
+                                // Log why the person was excluded
+                                var reasons = new List<string>();
+                                if (!matchesColors && searchCriteria.Colors.Count > 0)
+                                    reasons.Add("colors don't match");
+                                if (!matchesAccessories && (searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0))
+                                    reasons.Add("accessories/clothing don't match");
+                                if (!matchesPhysical && (searchCriteria.PhysicalAttributes.Count > 0 || searchCriteria.Height != null))
+                                    reasons.Add("physical attributes don't match");
+
+                                _logger.LogPersonExcluded(idx, string.Join(", ", reasons));
                             }
                         });
 
@@ -279,6 +345,8 @@ public class PersonTrackingService : IPersonTrackingService
                 : $"Processed {request.ImagesBase64.Count} images with {totalDetections} person detections. No filtering applied.";
 
             _logger.LogMatchedDetections(totalMatchedDetections, totalDetections);
+            _logger.LogProcessingComplete(totalDetections, totalMatchedDetections, string.Join("; ", criteriaDescription));
+            
             return response;
         }
         catch (Exception ex)

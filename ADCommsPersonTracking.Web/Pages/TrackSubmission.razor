@@ -158,6 +158,22 @@
                                       Placeholder="e.g., find a person in a yellow jacket and black hat with a suitcase"
                                       HelperText="Describe the person you want to track" />
 
+                        <MudSwitch @bind-Value="_enableDiagnostics" 
+                                   Label="Enable Detailed Diagnostics" 
+                                   Color="Color.Info"
+                                   Class="mt-3">
+                            <MudText Typo="Typo.caption">
+                                Track detailed information about the inference process for debugging
+                            </MudText>
+                        </MudSwitch>
+
+                        @if (_diagnosticsSessionId != null)
+                        {
+                            <MudAlert Severity="Severity.Success" Class="mt-2">
+                                Diagnostics enabled. <MudLink Href="@($"/inference-diagnostics/{_diagnosticsSessionId}")" Color="Color.Info">View Diagnostics</MudLink>
+                            </MudAlert>
+                        }
+
                         @if (_submitting)
                         {
                             <MudProgressLinear Color="Color.Primary" Value="@_progressPercentage" Class="mt-4" />
@@ -270,6 +286,8 @@
     private int _progressPercentage = 0;
     private string _currentStep = string.Empty;
     private CancellationTokenSource? _pollingCancellation;
+    private bool _enableDiagnostics = false;
+    private string? _diagnosticsSessionId = null;
 
     [SupplyParameterFromQuery(Name = "trackingId")]
     public string? TrackingIdFromQuery { get; set; }
@@ -369,6 +387,7 @@
         _trackingResponse = null;
         _progressPercentage = 0;
         _currentStep = "Starting...";
+        _diagnosticsSessionId = null;
 
         // Cancel any existing polling
         _pollingCancellation?.Cancel();
@@ -384,20 +403,41 @@
                 Timestamp = DateTime.UtcNow
             };
 
-            var jobResponse = await ApiService.TrackByIdAsync(request);
-
-            if (jobResponse != null)
+            if (_enableDiagnostics)
             {
-                _currentTrackByIdJobId = jobResponse.JobId;
-                Snackbar.Add($"Track-by-id started. Processing {jobResponse.TotalFrames} frames...", Severity.Info);
-                
-                // Start polling for status
-                await PollTrackByIdStatus(_pollingCancellation.Token);
+                var diagnosticsResponse = await ApiService.TrackByIdWithDiagnosticsAsync(request);
+                if (diagnosticsResponse != null)
+                {
+                    _currentTrackByIdJobId = diagnosticsResponse.JobId;
+                    _diagnosticsSessionId = diagnosticsResponse.DiagnosticsSessionId;
+                    Snackbar.Add($"Track-by-id with diagnostics started. Processing {diagnosticsResponse.TotalFrames} frames...", Severity.Success);
+                    
+                    // Start polling for status
+                    await PollTrackByIdStatus(_pollingCancellation.Token);
+                }
+                else
+                {
+                    Snackbar.Add("Failed to start track-by-id with diagnostics", Severity.Error);
+                    _submitting = false;
+                }
             }
             else
             {
-                Snackbar.Add("Failed to start track-by-id processing", Severity.Error);
-                _submitting = false;
+                var jobResponse = await ApiService.TrackByIdAsync(request);
+
+                if (jobResponse != null)
+                {
+                    _currentTrackByIdJobId = jobResponse.JobId;
+                    Snackbar.Add($"Track-by-id started. Processing {jobResponse.TotalFrames} frames...", Severity.Info);
+                    
+                    // Start polling for status
+                    await PollTrackByIdStatus(_pollingCancellation.Token);
+                }
+                else
+                {
+                    Snackbar.Add("Failed to start track-by-id processing", Severity.Error);
+                    _submitting = false;
+                }
             }
         }
         catch (Exception ex)

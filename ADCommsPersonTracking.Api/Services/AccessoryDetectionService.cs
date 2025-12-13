@@ -104,13 +104,25 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
 
     public AccessoryDetectionResult DetectAccessoriesFromYolo(BoundingBox personBox, List<DetectedObject> allAccessories)
     {
+        _logger.LogAccessoryDetectionStart(personBox.X, personBox.Y, personBox.Width, personBox.Height, allAccessories.Count);
+        
         var result = new AccessoryDetectionResult();
 
         // Find accessories that are spatially associated with this person
         // Using IoU and proximity-based association
         foreach (var accessory in allAccessories)
         {
-            if (IsAccessoryAssociatedWithPerson(personBox, accessory.BoundingBox))
+            _logger.LogAccessoryEvaluation(
+                accessory.ObjectType,
+                accessory.BoundingBox.Confidence,
+                accessory.BoundingBox.X,
+                accessory.BoundingBox.Y,
+                accessory.BoundingBox.Width,
+                accessory.BoundingBox.Height);
+
+            var isAssociated = IsAccessoryAssociatedWithPerson(personBox, accessory.BoundingBox);
+            
+            if (isAssociated)
             {
                 // Map YOLO class to our accessory/clothing categories
                 var detectedItem = new DetectedItem(accessory.ObjectType, accessory.BoundingBox.Confidence);
@@ -119,15 +131,27 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 if (AccessoryTypes.Contains(accessory.ObjectType))
                 {
                     result.Accessories.Add(detectedItem);
+                    _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as accessory");
                 }
                 else if (ClothingTypes.Contains(accessory.ObjectType))
                 {
                     result.ClothingItems.Add(detectedItem);
+                    _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as clothing");
                 }
+                else
+                {
+                    // Unknown type but spatially associated
+                    result.Accessories.Add(detectedItem);
+                    _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as accessory (unknown type)");
+                }
+            }
+            else
+            {
+                _logger.LogAccessoryAssociationResult(accessory.ObjectType, false, "No spatial association with person");
             }
         }
 
-        _logger.LogDebug("Associated {AccessoryCount} accessories with person", result.Accessories.Count);
+        _logger.LogAccessoryDetectionComplete(result.Accessories.Count, result.ClothingItems.Count);
         return result;
     }
 
@@ -136,8 +160,10 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         // Check if accessory overlaps with person or is very close to person
         // Method 1: Check IoU (Intersection over Union)
         var iou = CalculateIoU(personBox, accessoryBox);
+        
         if (iou > MinIouThreshold) // Even small overlap means association
         {
+            _logger.LogDebug("IoU {IoU:F4} > threshold {Threshold:F4}, accessory is associated via overlap", iou, MinIouThreshold);
             return true;
         }
 
@@ -154,10 +180,18 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         var accessoryCenterX = accessoryBox.X + accessoryBox.Width / 2;
         var accessoryCenterY = accessoryBox.Y + accessoryBox.Height / 2;
 
-        return accessoryCenterX >= extendedPersonBox.X &&
-               accessoryCenterX <= extendedPersonBox.X + extendedPersonBox.Width &&
-               accessoryCenterY >= extendedPersonBox.Y &&
-               accessoryCenterY <= extendedPersonBox.Y + extendedPersonBox.Height;
+        var within = accessoryCenterX >= extendedPersonBox.X &&
+                     accessoryCenterX <= extendedPersonBox.X + extendedPersonBox.Width &&
+                     accessoryCenterY >= extendedPersonBox.Y &&
+                     accessoryCenterY <= extendedPersonBox.Y + extendedPersonBox.Height;
+
+        _logger.LogExtendedBoundsCheck(
+            accessoryCenterX, accessoryCenterY,
+            extendedPersonBox.X, extendedPersonBox.Y,
+            extendedPersonBox.Width, extendedPersonBox.Height,
+            within);
+
+        return within;
     }
 
     private float CalculateIoU(BoundingBox box1, BoundingBox box2)
@@ -172,16 +206,15 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         var box2Area = box2.Width * box2.Height;
         var unionArea = box1Area + box2Area - intersectionArea;
 
-        return unionArea > 0 ? intersectionArea / unionArea : 0;
+        var iou = unionArea > 0 ? intersectionArea / unionArea : 0;
+        
+        _logger.LogIoUCalculation(intersectionArea, unionArea, iou);
+        
+        return iou;
     }
 
     public bool MatchesCriteria(AccessoryDetectionResult detectionResult, List<string> searchClothing, List<string> searchAccessories)
     {
-        if (searchClothing.Count == 0 && searchAccessories.Count == 0)
-        {
-            return true; // No accessory/clothing criteria
-        }
-
         var detectedClothingLabels = detectionResult.ClothingItems
             .Select(c => c.Label.ToLowerInvariant())
             .ToHashSet();
@@ -190,12 +223,27 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
             .Select(a => a.Label.ToLowerInvariant())
             .ToHashSet();
 
+        _logger.LogMatchesCriteriaInput(
+            searchClothing.Count,
+            searchAccessories.Count,
+            detectedClothingLabels.Count,
+            detectedAccessoryLabels.Count);
+
+        if (searchClothing.Count == 0 && searchAccessories.Count == 0)
+        {
+            _logger.LogMatchesCriteriaResult(true, "No criteria specified");
+            return true; // No accessory/clothing criteria
+        }
+
         // Check clothing items
         foreach (var searchItem in searchClothing)
         {
             var lower = searchItem.ToLowerInvariant();
+            _logger.LogItemComparison(searchItem, string.Join(", ", detectedClothingLabels));
+            
             if (detectedClothingLabels.Contains(lower) || detectedClothingLabels.Any(d => d.Contains(lower) || lower.Contains(d)))
             {
+                _logger.LogMatchesCriteriaResult(true, $"Clothing: {searchItem}");
                 return true;
             }
         }
@@ -204,12 +252,16 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         foreach (var searchItem in searchAccessories)
         {
             var lower = searchItem.ToLowerInvariant();
+            _logger.LogItemComparison(searchItem, string.Join(", ", detectedAccessoryLabels));
+            
             if (detectedAccessoryLabels.Contains(lower) || detectedAccessoryLabels.Any(d => d.Contains(lower) || lower.Contains(d)))
             {
+                _logger.LogMatchesCriteriaResult(true, $"Accessory: {searchItem}");
                 return true;
             }
         }
 
+        _logger.LogMatchesCriteriaResult(false, "No matches found");
         return false;
     }
 

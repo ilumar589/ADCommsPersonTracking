@@ -13,4 +13,7 @@ public interface IPersonTrackingApiService
     Task<TrackByIdJobResponse?> TrackByIdAsync(TrackByIdRequest request);
     Task<TrackByIdJobStatus?> GetTrackByIdStatusAsync(string jobId);
     Task<List<string>?> GetTrackingIdsAsync();
+    Task<TrackByIdWithDiagnosticsResponse?> TrackByIdWithDiagnosticsAsync(TrackByIdRequest request);
+    Task<InferenceDiagnostics?> GetDiagnosticsAsync(string sessionId);
+    Task<InferenceDiagnostics?> GetLatestDiagnosticsAsync();
 }

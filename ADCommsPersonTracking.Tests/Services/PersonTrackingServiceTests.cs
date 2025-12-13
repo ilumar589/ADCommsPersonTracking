@@ -38,6 +38,8 @@ public class PersonTrackingServiceTests
             .Build();
         
         var logger = Mock.Of<ILogger<PersonTrackingService>>();
+        var diagnosticsServiceMock = new Mock<IInferenceDiagnosticsService>();
+        diagnosticsServiceMock.Setup(d => d.IsEnabled).Returns(false);
 
         _service = new PersonTrackingService(
             _detectionServiceMock.Object,
@@ -46,6 +48,7 @@ public class PersonTrackingServiceTests
             _colorAnalysisServiceMock.Object,
             _accessoryDetectionServiceMock.Object,
             _physicalAttributeEstimatorMock.Object,
+            diagnosticsServiceMock.Object,
             configuration,
             logger);
     }

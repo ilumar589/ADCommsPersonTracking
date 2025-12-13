@@ -57,6 +57,9 @@ public class PersonTrackingControllerTests
             });
         
         var logger = Mock.Of<ILogger<PersonTrackingController>>();
+        var diagnosticsServiceMock = new Mock<IInferenceDiagnosticsService>();
+        diagnosticsServiceMock.Setup(d => d.IsEnabled).Returns(false);
+        
         _controller = new PersonTrackingController(
             _trackingServiceMock.Object, 
             logger,
@@ -64,7 +67,8 @@ public class PersonTrackingControllerTests
             _frameStorageServiceMock.Object,
             _videoCacheServiceMock.Object,
             _videoUploadJobServiceMock.Object,
-            _trackByIdJobServiceMock.Object);
+            _trackByIdJobServiceMock.Object,
+            diagnosticsServiceMock.Object);
     }
 
     [Fact]

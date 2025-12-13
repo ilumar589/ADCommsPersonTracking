@@ -121,24 +121,55 @@ public partial class PromptFeatureExtractor : IPromptFeatureExtractor
             return new SearchCriteria();
         }
 
+        _logger.LogPromptFeatureExtractionStart(prompt);
+
         var criteria = new SearchCriteria();
         var lowerPrompt = prompt.ToLowerInvariant();
 
         // Extract colors
         criteria.Colors = ExtractKeywords(lowerPrompt, ColorKeywords);
+        _logger.LogColorExtractionResult(criteria.Colors.Count);
+        foreach (var color in criteria.Colors)
+        {
+            _logger.LogColorKeywordFound(color);
+        }
 
         // Extract clothing items
         criteria.ClothingItems = ExtractKeywords(lowerPrompt, ClothingKeywords);
+        _logger.LogClothingExtractionResult(criteria.ClothingItems.Count);
+        foreach (var clothing in criteria.ClothingItems)
+        {
+            _logger.LogClothingKeywordFound(clothing);
+        }
 
         // Extract accessories
         criteria.Accessories = ExtractKeywords(lowerPrompt, AccessoryKeywords);
+        _logger.LogAccessoryExtractionResult(criteria.Accessories.Count);
+        foreach (var accessory in criteria.Accessories)
+        {
+            _logger.LogAccessoryKeywordFound(accessory);
+        }
 
         // Extract physical attributes
         criteria.PhysicalAttributes = ExtractKeywords(lowerPrompt, PhysicalAttributeKeywords);
+        _logger.LogPhysicalAttributeExtractionResult(criteria.PhysicalAttributes.Count);
+        foreach (var attribute in criteria.PhysicalAttributes)
+        {
+            _logger.LogPhysicalAttributeKeywordFound(attribute);
+        }
 
         // Extract height
         criteria.Height = ExtractHeight(prompt);
 
+        // Log final search criteria
+        _logger.LogFinalSearchCriteria(
+            string.Join(", ", criteria.Colors),
+            string.Join(", ", criteria.ClothingItems),
+            string.Join(", ", criteria.Accessories),
+            string.Join(", ", criteria.PhysicalAttributes),
+            criteria.Height?.OriginalText ?? "none");
+
+        // Legacy logging for backward compatibility
         _logger.LogExtractedFeatures(
             string.Join(", ", criteria.Colors),
             string.Join(", ", criteria.ClothingItems),
