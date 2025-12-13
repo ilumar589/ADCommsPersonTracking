@@ -172,6 +172,50 @@ public class PersonTrackingApiServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task UploadVideoAsync_WithMaxFrames_IncludesQueryParameter()
+    {
+        // Arrange
+        var fileName = "test.mp4";
+        var videoData = Encoding.UTF8.GetBytes("fake video content");
+        var videoStream = new MemoryStream(videoData);
+        var maxFrames = 50;
+        
+        var expectedResponse = new VideoUploadJobResponse
+        {
+            JobId = "test-job-id",
+            Message = "Upload started"
+        };
+
+        HttpRequestMessage? capturedRequest = null;
+        _httpMessageHandlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(expectedResponse),
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        // Act
+        var result = await _service.UploadVideoAsync(videoStream, fileName, maxFrames);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.JobId.Should().Be("test-job-id");
+        
+        // Verify the URL includes the maxFrames query parameter
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.RequestUri!.ToString().Should().Contain("maxFrames=50");
+    }
+
     /// <summary>
     /// Helper class to simulate a non-seekable stream
     /// </summary>

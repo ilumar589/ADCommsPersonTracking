@@ -85,7 +85,7 @@ public class VideoProcessingService : IVideoProcessingService
         }
     }
 
-    public async Task<List<byte[]>> ExtractFramesAsync(Stream videoStream, string fileName)
+    public async Task<List<byte[]>> ExtractFramesAsync(Stream videoStream, string fileName, int? maxFrames = null)
     {
         // Ensure FFmpeg is installed before processing
         await EnsureFFmpegInstalledAsync();
@@ -94,7 +94,7 @@ public class VideoProcessingService : IVideoProcessingService
         
         try
         {
-            var maxFrames = _configuration.GetValue<int>("VideoProcessing:MaxFrames", 100);
+            var effectiveMaxFrames = maxFrames ?? _configuration.GetValue<int>("VideoProcessing:MaxFrames", 100);
             var frameInterval = _configuration.GetValue<int>("VideoProcessing:FrameInterval", 1);
 
             // Save the video stream to a temporary file
@@ -107,7 +107,7 @@ public class VideoProcessingService : IVideoProcessingService
                     await videoStream.CopyToAsync(fileStream);
                 }
 
-                _logger.LogProcessingVideo(fileName, maxFrames, frameInterval);
+                _logger.LogProcessingVideo(fileName, effectiveMaxFrames, frameInterval);
 
                 // Get video info
                 var videoInfo = await FFMpegCore.FFProbe.AnalyseAsync(tempVideoPath);
@@ -118,7 +118,7 @@ public class VideoProcessingService : IVideoProcessingService
 
                 // Calculate how many frames to extract
                 var totalFrames = (int)(duration.TotalSeconds * frameRate);
-                var framesToExtract = Math.Min(maxFrames, totalFrames / frameInterval);
+                var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames / frameInterval);
                 
                 _logger.LogFrameExtraction(totalFrames, framesToExtract);
 

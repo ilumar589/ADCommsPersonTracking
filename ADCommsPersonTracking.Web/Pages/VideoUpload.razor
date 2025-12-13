@@ -31,6 +31,21 @@
                     <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Class="mt-2">@_fileName</MudChip>
                 }
 
+                @* Frame count slider: allows users to select max frames to extract (10-300 range chosen for performance vs. quality balance) *@
+                <MudText Typo="Typo.h6" Class="mt-4 mb-2">Frame Count</MudText>
+                <MudSlider T="int" 
+                           @bind-Value="_maxFrames" 
+                           Min="10" 
+                           Max="300" 
+                           Step="10"
+                           Color="Color.Primary"
+                           Disabled="@_uploading">
+                    Max Frames: @_maxFrames
+                </MudSlider>
+                <MudText Typo="Typo.caption" Class="mt-1 mb-2">
+                    Select the maximum number of frames to extract from the video (10-300)
+                </MudText>
+
                 @if (_uploading)
                 {
                     <MudProgressLinear Color="Color.Primary" Value="@_progressPercentage" Class="mt-4" />
@@ -113,6 +128,7 @@
     private int _progressPercentage = 0;
     private string _currentStep = string.Empty;
     private CancellationTokenSource? _pollingCancellation;
+    private int _maxFrames = 100;
 
     public void Dispose()
     {
@@ -158,7 +174,7 @@
             const long maxFileSize = 500 * 1024 * 1024; // 500MB max
             
             using var stream = _selectedFile.OpenReadStream(maxFileSize);
-            var jobResponse = await ApiService.UploadVideoAsync(stream, _selectedFile.Name);
+            var jobResponse = await ApiService.UploadVideoAsync(stream, _selectedFile.Name, _maxFrames);
 
             if (jobResponse != null)
             {

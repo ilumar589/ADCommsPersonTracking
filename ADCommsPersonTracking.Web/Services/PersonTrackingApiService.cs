@@ -67,7 +67,7 @@ public class PersonTrackingApiService : IPersonTrackingApiService
         }
     }
 
-    public async Task<VideoUploadJobResponse?> UploadVideoAsync(Stream videoStream, string fileName)
+    public async Task<VideoUploadJobResponse?> UploadVideoAsync(Stream videoStream, string fileName, int? maxFrames = null)
     {
         try
         {
@@ -98,7 +98,13 @@ public class PersonTrackingApiService : IPersonTrackingApiService
                 streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("video/mp4");
                 content.Add(streamContent, "video", fileName);
 
-                var response = await _httpClient.PostAsync("api/persontracking/video/upload", content);
+                var url = "api/persontracking/video/upload";
+                if (maxFrames.HasValue)
+                {
+                    url += $"?maxFrames={Uri.EscapeDataString(maxFrames.Value.ToString())}";
+                }
+
+                var response = await _httpClient.PostAsync(url, content);
                 response.EnsureSuccessStatusCode();
                 return await response.Content.ReadFromJsonAsync<VideoUploadJobResponse>();
             }
