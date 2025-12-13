@@ -541,7 +541,6 @@ public class PersonTrackingController : ControllerBase
     {
         const int ConversionProgressWeight = 20; // 20% for conversion
         const int ProcessingProgressWeight = 60; // 60% for actual processing
-        const int FinalizingProgressWeight = 20; // 20% for finalizing
         
         try
         {
