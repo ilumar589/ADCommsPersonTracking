@@ -376,5 +376,6 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     public void Dispose()
     {
         _session?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
