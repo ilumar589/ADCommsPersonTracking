@@ -98,17 +98,18 @@
 
                                 @if (result.Detections.Any())
                                 {
-                                    var matchingDetections = result.Detections.Where(d => d.MatchedCriteria.Any()).ToList();
-                                    var nonMatchingDetections = result.Detections.Where(d => !d.MatchedCriteria.Any()).ToList();
+                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
+                                    var matchingDetections = detectionsByMatch[true];
+                                    var nonMatchingDetections = detectionsByMatch[false];
                                     
                                     <MudExpansionPanels MultiExpansion="true">
                                         @if (matchingDetections.Any())
                                         {
-                                            <MudExpansionPanel @bind-IsExpanded="_matchingPanelExpanded1">
+                                            <MudExpansionPanel @bind-IsExpanded="_uploadMatchingPanelExpanded">
                                                 <TitleContent>
                                                     <div class="d-flex align-center">
                                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
-                                                        <MudText>Matching Results (@matchingDetections.Count)</MudText>
+                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
                                                     </div>
                                                 </TitleContent>
                                                 <ChildContent>
@@ -139,11 +140,11 @@
                                         
                                         @if (nonMatchingDetections.Any())
                                         {
-                                            <MudExpansionPanel @bind-IsExpanded="_nonMatchingPanelExpanded1">
+                                            <MudExpansionPanel @bind-IsExpanded="_uploadNonMatchingPanelExpanded">
                                                 <TitleContent>
                                                     <div class="d-flex align-center">
                                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
-                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count)</MudText>
+                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
                                                     </div>
                                                 </TitleContent>
                                                 <ChildContent>
@@ -271,17 +272,18 @@
 
                                 @if (result.Detections.Any())
                                 {
-                                    var matchingDetections = result.Detections.Where(d => d.MatchedCriteria.Any()).ToList();
-                                    var nonMatchingDetections = result.Detections.Where(d => !d.MatchedCriteria.Any()).ToList();
+                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
+                                    var matchingDetections = detectionsByMatch[true];
+                                    var nonMatchingDetections = detectionsByMatch[false];
                                     
                                     <MudExpansionPanels MultiExpansion="true">
                                         @if (matchingDetections.Any())
                                         {
-                                            <MudExpansionPanel @bind-IsExpanded="_matchingPanelExpanded2">
+                                            <MudExpansionPanel @bind-IsExpanded="_trackingMatchingPanelExpanded">
                                                 <TitleContent>
                                                     <div class="d-flex align-center">
                                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
-                                                        <MudText>Matching Results (@matchingDetections.Count)</MudText>
+                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
                                                     </div>
                                                 </TitleContent>
                                                 <ChildContent>
@@ -312,11 +314,11 @@
                                         
                                         @if (nonMatchingDetections.Any())
                                         {
-                                            <MudExpansionPanel @bind-IsExpanded="_nonMatchingPanelExpanded2">
+                                            <MudExpansionPanel @bind-IsExpanded="_trackingNonMatchingPanelExpanded">
                                                 <TitleContent>
                                                     <div class="d-flex align-center">
                                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
-                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count)</MudText>
+                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
                                                     </div>
                                                 </TitleContent>
                                                 <ChildContent>
@@ -370,10 +372,10 @@
     private CancellationTokenSource? _pollingCancellation;
     private bool _enableDiagnostics = false;
     private string? _diagnosticsSessionId = null;
-    private bool _matchingPanelExpanded1 = true;
-    private bool _nonMatchingPanelExpanded1 = false;
-    private bool _matchingPanelExpanded2 = true;
-    private bool _nonMatchingPanelExpanded2 = false;
+    private bool _uploadMatchingPanelExpanded = true;
+    private bool _uploadNonMatchingPanelExpanded = false;
+    private bool _trackingMatchingPanelExpanded = true;
+    private bool _trackingNonMatchingPanelExpanded = false;
 
     [SupplyParameterFromQuery(Name = "trackingId")]
     public string? TrackingIdFromQuery { get; set; }
