@@ -1,5 +1,6 @@
 using ADCommsPersonTracking.Api.Models;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace ADCommsPersonTracking.Api.Services;
 
@@ -11,6 +12,10 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
     private readonly TimeSpan _retentionTime;
     private string? _latestSessionId;
 
+    // Channel for async processing of diagnostics data
+    private readonly Channel<DiagnosticsMessage> _diagnosticsChannel;
+    private readonly CancellationTokenSource _cancellationTokenSource;
+
     public bool IsEnabled { get; }
 
     public InferenceDiagnosticsService(
@@ -21,11 +26,21 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
         _logger = logger;
         IsEnabled = configuration.GetValue("Diagnostics:Enabled", true);
         _retentionTime = TimeSpan.FromMinutes(configuration.GetValue("Diagnostics:RetentionMinutes", 30));
+        _cancellationTokenSource = new CancellationTokenSource();
 
-        // Start background cleanup task
+        // Create unbounded channel for high-throughput diagnostics
+        // Using unbounded to avoid blocking the caller thread
+        _diagnosticsChannel = Channel.CreateUnbounded<DiagnosticsMessage>(new UnboundedChannelOptions
+        {
+            SingleReader = true, // Only one background task will read from this channel
+            SingleWriter = false // Multiple threads may write diagnostics
+        });
+
+        // Start background tasks
         if (IsEnabled)
         {
-            _ = Task.Run(CleanupOldSessionsAsync);
+            _ = Task.Run(() => ProcessDiagnosticsAsync(_cancellationTokenSource.Token));
+            _ = Task.Run(() => CleanupOldSessionsAsync(_cancellationTokenSource.Token));
         }
     }
 
@@ -60,11 +75,14 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             return;
         }
 
-        if (_sessions.TryGetValue(sessionId, out var diagnostics))
+        // Send end session message to channel
+        var message = new DiagnosticsMessage
         {
-            _logger.LogDebug("Ended diagnostics session {SessionId} with {LogCount} log entries", 
-                sessionId, diagnostics.LogEntries.Count);
-        }
+            Type = DiagnosticsMessageType.EndSession,
+            SessionId = sessionId
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
     }
 
     public void AddLogEntry(string sessionId, string level, string category, string message, Dictionary<string, object>? properties = null)
@@ -74,22 +92,22 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             return;
         }
 
-        if (_sessions.TryGetValue(sessionId, out var diagnostics))
+        // Send log entry to channel for async processing - non-blocking!
+        var diagnosticsMessage = new DiagnosticsMessage
         {
-            var entry = new DiagnosticLogEntry
+            Type = DiagnosticsMessageType.LogEntry,
+            SessionId = sessionId,
+            LogEntry = new DiagnosticLogEntry
             {
                 Timestamp = DateTime.UtcNow,
                 Level = level,
                 Category = category,
                 Message = message,
                 Properties = properties ?? new Dictionary<string, object>()
-            };
-
-            lock (diagnostics.LogEntries)
-            {
-                diagnostics.LogEntries.Add(entry);
             }
-        }
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(diagnosticsMessage);
     }
 
     public void SetSearchCriteria(string sessionId, SearchCriteria criteria)
@@ -99,22 +117,15 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             return;
         }
 
-        if (_sessions.TryGetValue(sessionId, out var diagnostics))
+        // Send search criteria to channel for async processing
+        var message = new DiagnosticsMessage
         {
-            diagnostics.ExtractedCriteria = new SearchCriteriaDiagnostics
-            {
-                Colors = criteria.Colors,
-                ClothingItems = criteria.ClothingItems,
-                Accessories = criteria.Accessories,
-                PhysicalAttributes = criteria.PhysicalAttributes,
-                HeightInfo = criteria.Height?.OriginalText ?? string.Empty,
-                HasAnyCriteria = criteria.Colors.Count > 0 || 
-                               criteria.ClothingItems.Count > 0 || 
-                               criteria.Accessories.Count > 0 || 
-                               criteria.PhysicalAttributes.Count > 0 ||
-                               criteria.Height != null
-            };
-        }
+            Type = DiagnosticsMessageType.SearchCriteria,
+            SessionId = sessionId,
+            SearchCriteria = criteria
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
     }
 
     public void AddImageDiagnostics(string sessionId, ImageProcessingDiagnostics imageDiagnostics)
@@ -124,13 +135,15 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             return;
         }
 
-        if (_sessions.TryGetValue(sessionId, out var diagnostics))
+        // Send image diagnostics to channel for async processing
+        var message = new DiagnosticsMessage
         {
-            lock (diagnostics.ImageResults)
-            {
-                diagnostics.ImageResults.Add(imageDiagnostics);
-            }
-        }
+            Type = DiagnosticsMessageType.ImageDiagnostics,
+            SessionId = sessionId,
+            ImageDiagnostics = imageDiagnostics
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
     }
 
     public void SetProcessingSummary(string sessionId, ProcessingSummary summary)
@@ -140,10 +153,15 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             return;
         }
 
-        if (_sessions.TryGetValue(sessionId, out var diagnostics))
+        // Send processing summary to channel for async processing
+        var message = new DiagnosticsMessage
         {
-            diagnostics.Summary = summary;
-        }
+            Type = DiagnosticsMessageType.ProcessingSummary,
+            SessionId = sessionId,
+            ProcessingSummary = summary
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
     }
 
     public InferenceDiagnostics? GetDiagnostics(string sessionId)
@@ -167,13 +185,89 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
         return GetDiagnostics(_latestSessionId);
     }
 
-    private async Task CleanupOldSessionsAsync()
+    /// <summary>
+    /// Background task that processes diagnostics messages from the channel.
+    /// This runs on a separate thread and never blocks the caller.
+    /// </summary>
+    private async Task ProcessDiagnosticsAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        await foreach (var message in _diagnosticsChannel.Reader.ReadAllAsync(cancellationToken))
         {
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(5));
+                if (!_sessions.TryGetValue(message.SessionId, out var diagnostics))
+                {
+                    continue; // Session not found, skip
+                }
+
+                switch (message.Type)
+                {
+                    case DiagnosticsMessageType.LogEntry:
+                        if (message.LogEntry != null)
+                        {
+                            lock (diagnostics.LogEntries)
+                            {
+                                diagnostics.LogEntries.Add(message.LogEntry);
+                            }
+                        }
+                        break;
+
+                    case DiagnosticsMessageType.SearchCriteria:
+                        if (message.SearchCriteria != null)
+                        {
+                            diagnostics.ExtractedCriteria = new SearchCriteriaDiagnostics
+                            {
+                                Colors = message.SearchCriteria.Colors,
+                                ClothingItems = message.SearchCriteria.ClothingItems,
+                                Accessories = message.SearchCriteria.Accessories,
+                                PhysicalAttributes = message.SearchCriteria.PhysicalAttributes,
+                                HeightInfo = message.SearchCriteria.Height?.OriginalText ?? string.Empty,
+                                HasAnyCriteria = message.SearchCriteria.Colors.Count > 0 || 
+                                               message.SearchCriteria.ClothingItems.Count > 0 || 
+                                               message.SearchCriteria.Accessories.Count > 0 || 
+                                               message.SearchCriteria.PhysicalAttributes.Count > 0 ||
+                                               message.SearchCriteria.Height != null
+                            };
+                        }
+                        break;
+
+                    case DiagnosticsMessageType.ImageDiagnostics:
+                        if (message.ImageDiagnostics != null)
+                        {
+                            lock (diagnostics.ImageResults)
+                            {
+                                diagnostics.ImageResults.Add(message.ImageDiagnostics);
+                            }
+                        }
+                        break;
+
+                    case DiagnosticsMessageType.ProcessingSummary:
+                        if (message.ProcessingSummary != null)
+                        {
+                            diagnostics.Summary = message.ProcessingSummary;
+                        }
+                        break;
+
+                    case DiagnosticsMessageType.EndSession:
+                        _logger.LogDebug("Ended diagnostics session {SessionId} with {LogCount} log entries", 
+                            message.SessionId, diagnostics.LogEntries.Count);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing diagnostics message for session {SessionId}", message.SessionId);
+            }
+        }
+    }
+
+    private async Task CleanupOldSessionsAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
 
                 var cutoffTime = DateTime.UtcNow - _retentionTime;
                 var expiredSessions = _sessions
@@ -192,10 +286,40 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
                     _logger.LogInformation("Cleaned up {Count} expired diagnostics sessions", expiredSessions.Count);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Expected when shutting down
+                break;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during diagnostics session cleanup");
             }
         }
     }
+}
+
+/// <summary>
+/// Internal message type for channel-based diagnostics processing
+/// </summary>
+internal enum DiagnosticsMessageType
+{
+    LogEntry,
+    SearchCriteria,
+    ImageDiagnostics,
+    ProcessingSummary,
+    EndSession
+}
+
+/// <summary>
+/// Internal message structure for channel-based diagnostics
+/// </summary>
+internal class DiagnosticsMessage
+{
+    public DiagnosticsMessageType Type { get; set; }
+    public string SessionId { get; set; } = string.Empty;
+    public DiagnosticLogEntry? LogEntry { get; set; }
+    public SearchCriteria? SearchCriteria { get; set; }
+    public ImageProcessingDiagnostics? ImageDiagnostics { get; set; }
+    public ProcessingSummary? ProcessingSummary { get; set; }
 }

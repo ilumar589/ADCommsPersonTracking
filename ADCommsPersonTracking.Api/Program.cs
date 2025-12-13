@@ -23,6 +23,7 @@ builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>()
 builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IAccessoryDetectionService, AccessoryDetectionService>();
 builder.Services.AddSingleton<IPhysicalAttributeEstimator, PhysicalAttributeEstimator>();
+builder.Services.AddSingleton<IInferenceDiagnosticsService, InferenceDiagnosticsService>();
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
 // Add Azure Blob Storage client
