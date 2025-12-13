@@ -109,7 +109,7 @@ public class PersonTrackingController : ControllerBase
     /// Upload a video file, extract frames, and store them in Azure Blob Storage
     /// </summary>
     /// <param name="video">Video file to process</param>
-    /// <param name="maxFrames">Maximum number of frames to extract (optional)</param>
+    /// <param name="maxFrames">Maximum number of frames to extract (optional, must be between 1 and 1000)</param>
     /// <returns>Video upload job response with job ID for tracking progress</returns>
     [HttpPost("video/upload")]
     [ProducesResponseType(typeof(VideoUploadJobResponse), StatusCodes.Status200OK)]
@@ -119,6 +119,11 @@ public class PersonTrackingController : ControllerBase
         if (video == null || video.Length == 0)
         {
             return BadRequest("Video file is required");
+        }
+
+        if (maxFrames.HasValue && (maxFrames.Value < 1 || maxFrames.Value > 1000))
+        {
+            return BadRequest("maxFrames must be between 1 and 1000");
         }
 
         var videoName = video.FileName;

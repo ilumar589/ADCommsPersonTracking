@@ -101,7 +101,7 @@ public class PersonTrackingApiService : IPersonTrackingApiService
                 var url = "api/persontracking/video/upload";
                 if (maxFrames.HasValue)
                 {
-                    url += $"?maxFrames={maxFrames.Value}";
+                    url += $"?maxFrames={Uri.EscapeDataString(maxFrames.Value.ToString())}";
                 }
 
                 var response = await _httpClient.PostAsync(url, content);

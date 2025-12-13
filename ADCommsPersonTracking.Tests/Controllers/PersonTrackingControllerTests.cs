@@ -398,6 +398,30 @@ public class PersonTrackingControllerTests
     }
 
     [Fact]
+    public async Task UploadVideo_WithInvalidMaxFrames_ReturnsBadRequest()
+    {
+        // Arrange
+        var videoName = "test_video.mp4";
+        var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
+
+        // Act - Test with maxFrames too low
+        var result1 = await _controller.UploadVideo(video, 0);
+
+        // Assert
+        result1.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest1 = result1.Result as BadRequestObjectResult;
+        badRequest1!.Value.Should().Be("maxFrames must be between 1 and 1000");
+
+        // Act - Test with maxFrames too high
+        var result2 = await _controller.UploadVideo(video, 1001);
+
+        // Assert
+        result2.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest2 = result2.Result as BadRequestObjectResult;
+        badRequest2!.Value.Should().Be("maxFrames must be between 1 and 1000");
+    }
+
+    [Fact]
     public async Task TrackById_WithValidRequest_ReturnsJobIdImmediately()
     {
         // Arrange

@@ -31,6 +31,7 @@
                     <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Class="mt-2">@_fileName</MudChip>
                 }
 
+                @* Frame count slider: allows users to select max frames to extract (10-300 range chosen for performance vs. quality balance) *@
                 <MudText Typo="Typo.h6" Class="mt-4 mb-2">Frame Count</MudText>
                 <MudSlider T="int" 
                            @bind-Value="_maxFrames" 
