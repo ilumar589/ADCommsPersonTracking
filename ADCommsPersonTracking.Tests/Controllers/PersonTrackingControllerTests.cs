@@ -18,6 +18,7 @@ public class PersonTrackingControllerTests
     private readonly Mock<IFrameStorageService> _frameStorageServiceMock;
     private readonly Mock<IVideoCacheService> _videoCacheServiceMock;
     private readonly Mock<IVideoUploadJobService> _videoUploadJobServiceMock;
+    private readonly Mock<ITrackByIdJobService> _trackByIdJobServiceMock;
     private readonly PersonTrackingController _controller;
 
     public PersonTrackingControllerTests()
@@ -27,6 +28,7 @@ public class PersonTrackingControllerTests
         _frameStorageServiceMock = new Mock<IFrameStorageService>();
         _videoCacheServiceMock = new Mock<IVideoCacheService>();
         _videoUploadJobServiceMock = new Mock<IVideoUploadJobService>();
+        _trackByIdJobServiceMock = new Mock<ITrackByIdJobService>();
         
         // Setup default behavior for video upload job service
         _videoUploadJobServiceMock
@@ -40,6 +42,20 @@ public class PersonTrackingControllerTests
                 CreatedAt = DateTime.UtcNow
             });
         
+        // Setup default behavior for track-by-id job service
+        _trackByIdJobServiceMock
+            .Setup(s => s.CreateJob(It.IsAny<int>()))
+            .Returns((int totalFrames) => new TrackByIdJob
+            {
+                JobId = "test-track-job-id",
+                Status = "Pending",
+                ProgressPercentage = 0,
+                CurrentStep = "Initializing",
+                CreatedAt = DateTime.UtcNow,
+                TotalFrames = totalFrames,
+                ProcessedFrames = 0
+            });
+        
         var logger = Mock.Of<ILogger<PersonTrackingController>>();
         _controller = new PersonTrackingController(
             _trackingServiceMock.Object, 
@@ -47,7 +63,8 @@ public class PersonTrackingControllerTests
             _videoProcessingServiceMock.Object,
             _frameStorageServiceMock.Object,
             _videoCacheServiceMock.Object,
-            _videoUploadJobServiceMock.Object);
+            _videoUploadJobServiceMock.Object,
+            _trackByIdJobServiceMock.Object);
     }
 
     [Fact]
@@ -352,6 +369,197 @@ public class PersonTrackingControllerTests
         
         // Verify that CreateJob was called to start the background processing
         _videoUploadJobServiceMock.Verify(s => s.CreateJob(), Times.Once);
+    }
+
+    [Fact]
+    public async Task TrackById_WithValidRequest_ReturnsJobIdImmediately()
+    {
+        // Arrange
+        var trackingId = "video_123";
+        var frames = new List<byte[]> 
+        { 
+            CreateTestImage(640, 480),
+            CreateTestImage(640, 480),
+            CreateTestImage(640, 480)
+        };
+        
+        _frameStorageServiceMock
+            .Setup(s => s.FramesExistAsync(trackingId))
+            .ReturnsAsync(true);
+        
+        _frameStorageServiceMock
+            .Setup(s => s.GetFramesAsync(trackingId))
+            .ReturnsAsync(frames);
+
+        var request = new TrackByIdRequest
+        {
+            TrackingId = trackingId,
+            Prompt = "Find a person in a yellow jacket",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackById(request);
+
+        // Assert - Should return job response immediately
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var response = (result.Result as OkObjectResult)!.Value as TrackByIdJobResponse;
+        
+        response.Should().NotBeNull();
+        response!.JobId.Should().Be("test-track-job-id");
+        response.Message.Should().Contain("job ID");
+        response.TotalFrames.Should().Be(3);
+        
+        // Verify that CreateJob was called
+        _trackByIdJobServiceMock.Verify(s => s.CreateJob(3), Times.Once);
+    }
+
+    [Fact]
+    public async Task TrackById_WithMissingTrackingId_ReturnsBadRequest()
+    {
+        // Arrange
+        var request = new TrackByIdRequest
+        {
+            TrackingId = "",
+            Prompt = "Find a person",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackById(request);
+
+        // Assert
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest = result.Result as BadRequestObjectResult;
+        badRequest!.Value.Should().Be("Tracking ID is required");
+    }
+
+    [Fact]
+    public async Task TrackById_WithMissingPrompt_ReturnsBadRequest()
+    {
+        // Arrange
+        var request = new TrackByIdRequest
+        {
+            TrackingId = "video_123",
+            Prompt = "",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackById(request);
+
+        // Assert
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var badRequest = result.Result as BadRequestObjectResult;
+        badRequest!.Value.Should().Be("Search prompt is required");
+    }
+
+    [Fact]
+    public async Task TrackById_WithNonExistentTrackingId_ReturnsNotFound()
+    {
+        // Arrange
+        var trackingId = "non_existent_video";
+        
+        _frameStorageServiceMock
+            .Setup(s => s.FramesExistAsync(trackingId))
+            .ReturnsAsync(false);
+
+        var request = new TrackByIdRequest
+        {
+            TrackingId = trackingId,
+            Prompt = "Find a person",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackById(request);
+
+        // Assert
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        var notFound = result.Result as NotFoundObjectResult;
+        notFound!.Value.Should().Be($"No frames found for tracking ID: {trackingId}");
+    }
+
+    [Fact]
+    public async Task TrackById_UpdatesJobProgress()
+    {
+        // Arrange
+        var trackingId = "video_123";
+        var frames = new List<byte[]> { CreateTestImage(640, 480) };
+        
+        _frameStorageServiceMock
+            .Setup(s => s.FramesExistAsync(trackingId))
+            .ReturnsAsync(true);
+        
+        _frameStorageServiceMock
+            .Setup(s => s.GetFramesAsync(trackingId))
+            .ReturnsAsync(frames);
+
+        var request = new TrackByIdRequest
+        {
+            TrackingId = trackingId,
+            Prompt = "Find a person",
+            Timestamp = DateTime.UtcNow
+        };
+
+        // Act
+        var result = await _controller.TrackById(request);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        
+        // Verify that progress updates were called
+        _trackByIdJobServiceMock.Verify(
+            s => s.UpdateProgress(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()), 
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void GetTrackByIdStatus_WithValidJobId_ReturnsJob()
+    {
+        // Arrange
+        var jobId = "test-job-id";
+        var job = new TrackByIdJob
+        {
+            JobId = jobId,
+            Status = "Processing",
+            ProgressPercentage = 50,
+            CurrentStep = "Processing frames",
+            TotalFrames = 100,
+            ProcessedFrames = 50,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _trackByIdJobServiceMock
+            .Setup(s => s.GetJob(jobId))
+            .Returns(job);
+
+        // Act
+        var result = _controller.GetTrackByIdStatus(jobId);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(job);
+    }
+
+    [Fact]
+    public void GetTrackByIdStatus_WithInvalidJobId_ReturnsNotFound()
+    {
+        // Arrange
+        var jobId = "non-existent-job-id";
+
+        _trackByIdJobServiceMock
+            .Setup(s => s.GetJob(jobId))
+            .Returns((TrackByIdJob?)null);
+
+        // Act
+        var result = _controller.GetTrackByIdStatus(jobId);
+
+        // Assert
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        var notFound = result.Result as NotFoundObjectResult;
+        notFound!.Value.Should().Be($"Job with ID '{jobId}' not found");
     }
 
     private IFormFile CreateMockFormFile(string fileName, string contentType, byte[] content)
