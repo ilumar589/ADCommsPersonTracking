@@ -4,7 +4,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // Read YOLO11 configuration from appsettings
 var yoloConfig = builder.Configuration.GetSection("Yolo11");
-var yoloModel = yoloConfig["Model"] ?? "yolo11n.onnx";
+var yoloModel = yoloConfig["Model"] ?? "yolo11m.onnx";
 
 // Define shared model directory path (relative to solution root)
 var modelsPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "models"));
