@@ -131,17 +131,30 @@ public class PersonTrackingApiService : IPersonTrackingApiService
         }
     }
 
-    public async Task<TrackingResponse?> TrackByIdAsync(TrackByIdRequest request)
+    public async Task<TrackByIdJobResponse?> TrackByIdAsync(TrackByIdRequest request)
     {
         try
         {
             var response = await _httpClient.PostAsJsonAsync("api/persontracking/track-by-id", request);
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<TrackingResponse>();
+            return await response.Content.ReadFromJsonAsync<TrackByIdJobResponse>();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error submitting track-by-id request: {TrackingId}", request.TrackingId);
+            return null;
+        }
+    }
+
+    public async Task<TrackByIdJobStatus?> GetTrackByIdStatusAsync(string jobId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<TrackByIdJobStatus>($"api/persontracking/track-by-id/status/{jobId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting track-by-id status: {JobId}", jobId);
             return null;
         }
     }

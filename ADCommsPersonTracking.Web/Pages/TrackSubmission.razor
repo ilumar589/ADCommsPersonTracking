@@ -158,6 +158,14 @@
                                       Placeholder="e.g., find a person in a yellow jacket and black hat with a suitcase"
                                       HelperText="Describe the person you want to track" />
 
+                        @if (_submitting)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Value="@_progressPercentage" Class="mt-4" />
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                                @_currentStep (@_progressPercentage%)
+                            </MudText>
+                        }
+
                         <MudButton Variant="Variant.Filled" 
                                    Color="Color.Primary" 
                                    StartIcon="@Icons.Material.Filled.Search"
@@ -246,6 +254,8 @@
     </MudTabPanel>
 </MudTabs>
 
+@implements IDisposable
+
 @code {
     private string _imageBase64 = string.Empty;
     private string _fileName = string.Empty;
@@ -254,9 +264,19 @@
     private bool _submitting = false;
     private TrackingResponse? _trackingResponse;
     private int _activeTabIndex = 0;
+    private string? _currentTrackByIdJobId;
+    private int _progressPercentage = 0;
+    private string _currentStep = string.Empty;
+    private CancellationTokenSource? _pollingCancellation;
 
     [SupplyParameterFromQuery(Name = "trackingId")]
     public string? TrackingIdFromQuery { get; set; }
+
+    public void Dispose()
+    {
+        _pollingCancellation?.Cancel();
+        _pollingCancellation?.Dispose();
+    }
 
     protected override void OnInitialized()
     {
@@ -345,6 +365,13 @@
 
         _submitting = true;
         _trackingResponse = null;
+        _progressPercentage = 0;
+        _currentStep = "Starting...";
+
+        // Cancel any existing polling
+        _pollingCancellation?.Cancel();
+        _pollingCancellation?.Dispose();
+        _pollingCancellation = new CancellationTokenSource();
 
         try
         {
@@ -355,24 +382,85 @@
                 Timestamp = DateTime.UtcNow
             };
 
-            _trackingResponse = await ApiService.TrackByIdAsync(request);
+            var jobResponse = await ApiService.TrackByIdAsync(request);
 
-            if (_trackingResponse != null)
+            if (jobResponse != null)
             {
-                Snackbar.Add("Tracking request processed successfully", Severity.Success);
+                _currentTrackByIdJobId = jobResponse.JobId;
+                Snackbar.Add($"Track-by-id started. Processing {jobResponse.TotalFrames} frames...", Severity.Info);
+                
+                // Start polling for status
+                await PollTrackByIdStatus(_pollingCancellation.Token);
             }
             else
             {
-                Snackbar.Add("Failed to process tracking request", Severity.Error);
+                Snackbar.Add("Failed to start track-by-id processing", Severity.Error);
+                _submitting = false;
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
             _submitting = false;
+        }
+    }
+
+    private async Task PollTrackByIdStatus(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && _currentTrackByIdJobId != null)
+        {
+            try
+            {
+                await Task.Delay(1500, cancellationToken); // Poll every 1.5 seconds
+                
+                var status = await ApiService.GetTrackByIdStatusAsync(_currentTrackByIdJobId);
+                
+                if (status == null)
+                {
+                    Snackbar.Add("Failed to get track-by-id status", Severity.Error);
+                    _submitting = false;
+                    break;
+                }
+
+                _progressPercentage = status.ProgressPercentage;
+                _currentStep = status.CurrentStep;
+                StateHasChanged();
+
+                if (status.Status == "Completed")
+                {
+                    _trackingResponse = status.TrackingResponse;
+                    
+                    if (_trackingResponse != null)
+                    {
+                        var totalDetections = _trackingResponse.Results.Sum(r => r.Detections.Count);
+                        Snackbar.Add($"Track-by-id completed! Found {totalDetections} detections across {status.ProcessedFrames} frames.", Severity.Success);
+                    }
+                    else
+                    {
+                        Snackbar.Add("Track-by-id completed but no results returned.", Severity.Warning);
+                    }
+                    
+                    _submitting = false;
+                    break;
+                }
+                else if (status.Status == "Failed")
+                {
+                    Snackbar.Add($"Track-by-id failed: {status.ErrorMessage}", Severity.Error);
+                    _submitting = false;
+                    break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Polling was cancelled, exit gracefully
+                break;
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error checking track-by-id status: {ex.Message}", Severity.Error);
+                _submitting = false;
+                break;
+            }
         }
     }
 }
