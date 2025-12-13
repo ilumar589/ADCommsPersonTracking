@@ -98,32 +98,74 @@
 
                                 @if (result.Detections.Any())
                                 {
-                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Detections (@result.Detections.Count)</MudText>
+                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
+                                    var matchingDetections = detectionsByMatch[true];
+                                    var nonMatchingDetections = detectionsByMatch[false];
                                     
-                                    @foreach (var detection in result.Detections)
-                                    {
-                                        <MudCard Elevation="1" Class="mb-2">
-                                            <MudCardContent>
-                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
-                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
-                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
-                                                <MudText Typo="Typo.body2">
-                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
-                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
-                                                </MudText>
-                                                @if (detection.MatchedCriteria.Any())
-                                                {
-                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
-                                                    <MudChipSet T="string">
-                                                        @foreach (var criteria in detection.MatchedCriteria)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
-                                                        }
-                                                    </MudChipSet>
-                                                }
-                                            </MudCardContent>
-                                        </MudCard>
-                                    }
+                                    <MudExpansionPanels MultiExpansion="true">
+                                        @if (matchingDetections.Any())
+                                        {
+                                            <MudExpansionPanel @bind-IsExpanded="_uploadMatchingPanelExpanded">
+                                                <TitleContent>
+                                                    <div class="d-flex align-center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
+                                                    </div>
+                                                </TitleContent>
+                                                <ChildContent>
+                                                    @foreach (var detection in matchingDetections)
+                                                    {
+                                                        <MudCard Elevation="1" Class="mb-2">
+                                                            <MudCardContent>
+                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                                <MudText Typo="Typo.body2">
+                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                                </MudText>
+                                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
+                                                                    <MudChipSet T="string">
+                                                                        @foreach (var criteria in detection.MatchedCriteria)
+                                                                        {
+                                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
+                                                                        }
+                                                                    </MudChipSet>
+                                                            </MudCardContent>
+                                                        </MudCard>
+                                                    }
+                                                </ChildContent>
+                                            </MudExpansionPanel>
+                                        }
+                                        
+                                        @if (nonMatchingDetections.Any())
+                                        {
+                                            <MudExpansionPanel @bind-IsExpanded="_uploadNonMatchingPanelExpanded">
+                                                <TitleContent>
+                                                    <div class="d-flex align-center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
+                                                    </div>
+                                                </TitleContent>
+                                                <ChildContent>
+                                                    @foreach (var detection in nonMatchingDetections)
+                                                    {
+                                                        <MudCard Elevation="1" Class="mb-2">
+                                                            <MudCardContent>
+                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                                <MudText Typo="Typo.body2">
+                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                                </MudText>
+                                                            </MudCardContent>
+                                                        </MudCard>
+                                                    }
+                                                </ChildContent>
+                                            </MudExpansionPanel>
+                                        }
+                                    </MudExpansionPanels>
                                 }
                                 else
                                 {
@@ -230,32 +272,74 @@
 
                                 @if (result.Detections.Any())
                                 {
-                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Detections (@result.Detections.Count)</MudText>
+                                    var detectionsByMatch = result.Detections.ToLookup(d => d.MatchedCriteria.Any());
+                                    var matchingDetections = detectionsByMatch[true];
+                                    var nonMatchingDetections = detectionsByMatch[false];
                                     
-                                    @foreach (var detection in result.Detections)
-                                    {
-                                        <MudCard Elevation="1" Class="mb-2">
-                                            <MudCardContent>
-                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
-                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
-                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
-                                                <MudText Typo="Typo.body2">
-                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
-                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
-                                                </MudText>
-                                                @if (detection.MatchedCriteria.Any())
-                                                {
-                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
-                                                    <MudChipSet T="string">
-                                                        @foreach (var criteria in detection.MatchedCriteria)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
-                                                        }
-                                                    </MudChipSet>
-                                                }
-                                            </MudCardContent>
-                                        </MudCard>
-                                    }
+                                    <MudExpansionPanels MultiExpansion="true">
+                                        @if (matchingDetections.Any())
+                                        {
+                                            <MudExpansionPanel @bind-IsExpanded="_trackingMatchingPanelExpanded">
+                                                <TitleContent>
+                                                    <div class="d-flex align-center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                                                        <MudText>Matching Results (@matchingDetections.Count())</MudText>
+                                                    </div>
+                                                </TitleContent>
+                                                <ChildContent>
+                                                    @foreach (var detection in matchingDetections)
+                                                    {
+                                                        <MudCard Elevation="1" Class="mb-2">
+                                                            <MudCardContent>
+                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                                <MudText Typo="Typo.body2">
+                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                                </MudText>
+                                                                    <MudText Typo="Typo.body2" Class="mt-2">Matched Criteria:</MudText>
+                                                                    <MudChipSet T="string">
+                                                                        @foreach (var criteria in detection.MatchedCriteria)
+                                                                        {
+                                                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@criteria</MudChip>
+                                                                        }
+                                                                    </MudChipSet>
+                                                            </MudCardContent>
+                                                        </MudCard>
+                                                    }
+                                                </ChildContent>
+                                            </MudExpansionPanel>
+                                        }
+                                        
+                                        @if (nonMatchingDetections.Any())
+                                        {
+                                            <MudExpansionPanel @bind-IsExpanded="_trackingNonMatchingPanelExpanded">
+                                                <TitleContent>
+                                                    <div class="d-flex align-center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+                                                        <MudText>Non-Matching Results (@nonMatchingDetections.Count())</MudText>
+                                                    </div>
+                                                </TitleContent>
+                                                <ChildContent>
+                                                    @foreach (var detection in nonMatchingDetections)
+                                                    {
+                                                        <MudCard Elevation="1" Class="mb-2">
+                                                            <MudCardContent>
+                                                                <MudText Typo="Typo.subtitle2">Tracking ID: @detection.TrackingId</MudText>
+                                                                <MudText Typo="Typo.body2">Description: @detection.Description</MudText>
+                                                                <MudText Typo="Typo.body2">Match Score: @detection.MatchScore.ToString("P0")</MudText>
+                                                                <MudText Typo="Typo.body2">
+                                                                    Bounding Box: (@detection.BoundingBox.X.ToString("F0"), @detection.BoundingBox.Y.ToString("F0")) 
+                                                                    [@detection.BoundingBox.Width.ToString("F0") x @detection.BoundingBox.Height.ToString("F0")]
+                                                                </MudText>
+                                                            </MudCardContent>
+                                                        </MudCard>
+                                                    }
+                                                </ChildContent>
+                                            </MudExpansionPanel>
+                                        }
+                                    </MudExpansionPanels>
                                 }
                                 else
                                 {
@@ -288,6 +372,10 @@
     private CancellationTokenSource? _pollingCancellation;
     private bool _enableDiagnostics = false;
     private string? _diagnosticsSessionId = null;
+    private bool _uploadMatchingPanelExpanded = true;
+    private bool _uploadNonMatchingPanelExpanded = false;
+    private bool _trackingMatchingPanelExpanded = true;
+    private bool _trackingNonMatchingPanelExpanded = false;
 
     [SupplyParameterFromQuery(Name = "trackingId")]
     public string? TrackingIdFromQuery { get; set; }
