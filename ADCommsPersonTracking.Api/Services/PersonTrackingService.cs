@@ -129,17 +129,30 @@ public class PersonTrackingService : IPersonTrackingService
 
                         _logger.LogImageProcessingStart(imageIndex, imageWidth, imageHeight, imageBase64.Length);
 
+                        // Create image diagnostics if enabled
+                        ImageProcessingDiagnostics? imageDiagnostics = null;
+                        if (hasDiagnostics)
+                        {
+                            imageDiagnostics = new ImageProcessingDiagnostics
+                            {
+                                ImageIndex = imageIndex,
+                                ImageWidth = imageWidth,
+                                ImageHeight = imageHeight
+                            };
+                        }
+
                         // Detect persons and accessories in the frame using YOLO11
                         // Only use new method if searching for accessories
                         List<BoundingBox> detections;
                         List<DetectedObject> allAccessories = new();
+                        List<DetectedObject> allObjects = new();
                         
                         var takingAccessoryPath = searchCriteria.Accessories.Count > 0 || searchCriteria.ClothingItems.Count > 0;
                         _logger.LogAccessoryDetectionPath(imageIndex, takingAccessoryPath, searchCriteria.Accessories.Count, searchCriteria.ClothingItems.Count);
                         
                         if (takingAccessoryPath)
                         {
-                            var allObjects = await _detectionService.DetectObjectsAsync(imageBytes);
+                            allObjects = await _detectionService.DetectObjectsAsync(imageBytes);
                             detections = allObjects.Where(o => o.ClassId == 0).Select(o => o.BoundingBox).ToList();
                             allAccessories = allObjects.Where(o => o.ClassId != 0).ToList();
 
@@ -161,6 +174,28 @@ public class PersonTrackingService : IPersonTrackingService
                                     obj.BoundingBox.Y,
                                     obj.BoundingBox.Width,
                                     obj.BoundingBox.Height);
+                            }
+                            
+                            // Populate diagnostics with all YOLO detections
+                            if (imageDiagnostics != null)
+                            {
+                                foreach (var obj in allObjects)
+                                {
+                                    imageDiagnostics.AllYoloDetections.Add(new YoloDetectionDiagnostics
+                                    {
+                                        ClassId = obj.ClassId,
+                                        ClassName = obj.ObjectType,
+                                        Confidence = obj.BoundingBox.Confidence,
+                                        BoundingBox = new BoundingBoxDiagnostics
+                                        {
+                                            X = obj.BoundingBox.X,
+                                            Y = obj.BoundingBox.Y,
+                                            Width = obj.BoundingBox.Width,
+                                            Height = obj.BoundingBox.Height,
+                                            Confidence = obj.BoundingBox.Confidence
+                                        }
+                                    });
+                                }
                             }
                         }
                         else
@@ -208,11 +243,38 @@ public class PersonTrackingService : IPersonTrackingService
                                 string.Join(", ", physicalAttributes.AllAttributes),
                                 physicalAttributes.EstimatedHeightMeters);
                             
+                            // Create person diagnostics if enabled
+                            PersonDetectionDiagnostics? personDiagnostics = null;
+                            AccessoryMatchingDiagnostics? accessoryDiagnostics = null;
+                            if (imageDiagnostics != null)
+                            {
+                                personDiagnostics = new PersonDetectionDiagnostics
+                                {
+                                    PersonIndex = idx,
+                                    PersonBox = new BoundingBoxDiagnostics
+                                    {
+                                        X = detection.X,
+                                        Y = detection.Y,
+                                        Width = detection.Width,
+                                        Height = detection.Height,
+                                        Confidence = detection.Confidence
+                                    },
+                                    ColorAnalysis = new ColorAnalysisDiagnostics
+                                    {
+                                        UpperBodyColors = colorProfile.UpperBodyColors.Select(c => c.ColorName).ToList(),
+                                        LowerBodyColors = colorProfile.LowerBodyColors.Select(c => c.ColorName).ToList(),
+                                        OverallColors = colorProfile.OverallColors.Select(c => c.ColorName).ToList()
+                                    }
+                                };
+                                accessoryDiagnostics = new AccessoryMatchingDiagnostics();
+                                personDiagnostics.AccessoryMatching = accessoryDiagnostics;
+                            }
+
                             // Detect accessories using YOLO-detected accessories if available
                             AccessoryDetectionResult accessoryResult;
                             if (allAccessories.Count > 0)
                             {
-                                accessoryResult = _accessoryDetectionService.DetectAccessoriesFromYolo(detection, allAccessories);
+                                accessoryResult = _accessoryDetectionService.DetectAccessoriesFromYolo(detection, allAccessories, accessoryDiagnostics);
                             }
                             else
                             {
@@ -231,6 +293,26 @@ public class PersonTrackingService : IPersonTrackingService
 
                             // Log matching results
                             _logger.LogPersonMatchingResult(idx, matchesColors, matchesAccessories, matchesPhysical, overallMatch);
+                            
+                            // Populate criteria matching diagnostics
+                            if (personDiagnostics != null)
+                            {
+                                // Build detailed match explanations
+                                var colorMatchDetails = BuildColorMatchDetails(colorProfile, searchCriteria.Colors, matchesColors);
+                                var accessoryMatchDetails = BuildAccessoryMatchDetails(accessoryResult, searchCriteria.ClothingItems, searchCriteria.Accessories, matchesAccessories);
+                                var physicalMatchDetails = BuildPhysicalMatchDetails(physicalAttributes, searchCriteria.PhysicalAttributes, searchCriteria.Height, matchesPhysical);
+                                
+                                personDiagnostics.CriteriaMatching = new CriteriaMatchingDiagnostics
+                                {
+                                    MatchesColors = matchesColors,
+                                    ColorMatchDetails = colorMatchDetails,
+                                    MatchesAccessories = matchesAccessories,
+                                    AccessoryMatchDetails = accessoryMatchDetails,
+                                    MatchesPhysical = matchesPhysical,
+                                    PhysicalMatchDetails = physicalMatchDetails,
+                                    OverallMatch = overallMatch
+                                };
+                            }
 
                             // Include detection only if it matches all specified criteria
                             if (overallMatch)
@@ -294,6 +376,13 @@ public class PersonTrackingService : IPersonTrackingService
                                 {
                                     totalMatchedDetections++;
                                 }
+                                
+                                // Mark as included in diagnostics
+                                if (personDiagnostics != null)
+                                {
+                                    personDiagnostics.WasIncludedInResults = true;
+                                    personDiagnostics.ExclusionReason = string.Empty;
+                                }
                             }
                             else
                             {
@@ -306,7 +395,24 @@ public class PersonTrackingService : IPersonTrackingService
                                 if (!matchesPhysical && (searchCriteria.PhysicalAttributes.Count > 0 || searchCriteria.Height != null))
                                     reasons.Add("physical attributes don't match");
 
-                                _logger.LogPersonExcluded(idx, string.Join(", ", reasons));
+                                var exclusionReason = string.Join(", ", reasons);
+                                _logger.LogPersonExcluded(idx, exclusionReason);
+                                
+                                // Mark as excluded in diagnostics
+                                if (personDiagnostics != null)
+                                {
+                                    personDiagnostics.WasIncludedInResults = false;
+                                    personDiagnostics.ExclusionReason = exclusionReason;
+                                }
+                            }
+                            
+                            // Add person diagnostics to image diagnostics
+                            if (personDiagnostics != null && imageDiagnostics != null)
+                            {
+                                lock (imageDiagnostics.PersonAnalysis)
+                                {
+                                    imageDiagnostics.PersonAnalysis.Add(personDiagnostics);
+                                }
                             }
                         });
 
@@ -323,6 +429,12 @@ public class PersonTrackingService : IPersonTrackingService
                             Detections = detectionsList,
                             AnnotatedImageBase64 = annotatedImageBase64
                         });
+                        
+                        // Add image diagnostics to session
+                        if (hasDiagnostics && imageDiagnostics != null)
+                        {
+                            _diagnosticsService.AddImageDiagnostics(diagnosticsSessionId!, imageDiagnostics);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -470,5 +582,90 @@ public class PersonTrackingService : IPersonTrackingService
 
         // Use SIMD-optimized distance calculation
         return SimdMath.CalculateDistance(cx1, cy1, cx2, cy2);
+    }
+
+    private string BuildColorMatchDetails(PersonColorProfile colorProfile, List<string> searchColors, bool matches)
+    {
+        if (searchColors.Count == 0)
+        {
+            return "No color criteria specified";
+        }
+
+        var allDetectedColorNames = colorProfile.UpperBodyColors
+            .Concat(colorProfile.LowerBodyColors)
+            .Concat(colorProfile.OverallColors)
+            .Select(c => c.ColorName.ToLowerInvariant())
+            .ToHashSet();
+
+        var detectedColorsStr = string.Join(", ", allDetectedColorNames);
+        var searchColorsStr = string.Join(", ", searchColors);
+
+        if (matches)
+        {
+            var matchedColors = searchColors.Where(c => allDetectedColorNames.Contains(c.ToLowerInvariant())).ToList();
+            return $"✓ Searched for: {searchColorsStr}. Detected: {detectedColorsStr}. Matched: {string.Join(", ", matchedColors)}";
+        }
+        else
+        {
+            return $"✗ Searched for: {searchColorsStr}. Detected: {detectedColorsStr}. No matches found";
+        }
+    }
+
+    private string BuildAccessoryMatchDetails(AccessoryDetectionResult accessoryResult, List<string> searchClothing, List<string> searchAccessories, bool matches)
+    {
+        if (searchClothing.Count == 0 && searchAccessories.Count == 0)
+        {
+            return "No accessory/clothing criteria specified";
+        }
+
+        var detectedItems = accessoryResult.Accessories.Concat(accessoryResult.ClothingItems)
+            .Select(a => a.Label.ToLowerInvariant())
+            .ToList();
+
+        var detectedItemsStr = detectedItems.Count > 0 ? string.Join(", ", detectedItems) : "none";
+        var searchItemsStr = string.Join(", ", searchClothing.Concat(searchAccessories));
+
+        if (matches)
+        {
+            var matchedItems = searchAccessories.Concat(searchClothing)
+                .Where(s => detectedItems.Any(d => d.Contains(s.ToLowerInvariant()) || s.ToLowerInvariant().Contains(d)))
+                .ToList();
+            return $"✓ Searched for: {searchItemsStr}. Detected: {detectedItemsStr}. Matched: {string.Join(", ", matchedItems)}";
+        }
+        else
+        {
+            return $"✗ Searched for: {searchItemsStr}. Detected: {detectedItemsStr}. No matches found";
+        }
+    }
+
+    private string BuildPhysicalMatchDetails(PhysicalAttributes physicalAttributes, List<string> searchPhysical, HeightInfo? searchHeight, bool matches)
+    {
+        if (searchPhysical.Count == 0 && searchHeight == null)
+        {
+            return "No physical attribute criteria specified";
+        }
+
+        var detectedAttrs = string.Join(", ", physicalAttributes.AllAttributes);
+        var searchCriteria = new List<string>();
+        
+        if (searchPhysical.Count > 0)
+        {
+            searchCriteria.Add($"attributes: {string.Join(", ", searchPhysical)}");
+        }
+        if (searchHeight != null)
+        {
+            searchCriteria.Add($"height: {searchHeight.Value.OriginalText}");
+        }
+
+        var searchStr = string.Join(", ", searchCriteria);
+
+        if (matches)
+        {
+            return $"✓ Searched for: {searchStr}. Detected: {detectedAttrs}, height: ~{physicalAttributes.EstimatedHeightMeters:F2}m. Match found";
+        }
+        else
+        {
+            return $"✗ Searched for: {searchStr}. Detected: {detectedAttrs}, height: ~{physicalAttributes.EstimatedHeightMeters:F2}m. No match";
+        }
     }
 }

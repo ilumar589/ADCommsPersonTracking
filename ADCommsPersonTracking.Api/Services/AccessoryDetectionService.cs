@@ -19,12 +19,12 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
     private InferenceSession? _session;
     private readonly float _confidenceThreshold;
     
-    // Thresholds for spatial association
-    private const float MinIouThreshold = 0.01f; // Minimum IoU for association
-    private const float ExtendedBoxLeftRightFactor = 0.2f; // Extend person box by 20% left/right for backpacks
-    private const float ExtendedBoxTopFactor = 0.1f; // Extend person box by 10% at top
-    private const float ExtendedBoxWidthMultiplier = 1.4f; // Total width = 140% of original
-    private const float ExtendedBoxHeightMultiplier = 1.2f; // Total height = 120% of original
+    // Thresholds for spatial association - now configurable
+    private readonly float _minIouThreshold;
+    private readonly float _extendedBoxLeftRightFactor;
+    private readonly float _extendedBoxTopFactor;
+    private readonly float _extendedBoxWidthMultiplier;
+    private readonly float _extendedBoxHeightMultiplier;
     
     // Accessory and clothing type classifications
     private static readonly HashSet<string> AccessoryTypes = new(StringComparer.OrdinalIgnoreCase) 
@@ -61,6 +61,13 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
         _configuration = configuration;
         _logger = logger;
         _confidenceThreshold = configuration.GetValue("AccessoryDetection:ConfidenceThreshold", 0.5f);
+        
+        // Load configurable thresholds
+        _minIouThreshold = configuration.GetValue("AccessoryDetection:MinIouThreshold", 0.01f);
+        _extendedBoxLeftRightFactor = configuration.GetValue("AccessoryDetection:ExtendedBoxLeftRightFactor", 0.2f);
+        _extendedBoxTopFactor = configuration.GetValue("AccessoryDetection:ExtendedBoxTopFactor", 0.1f);
+        _extendedBoxWidthMultiplier = configuration.GetValue("AccessoryDetection:ExtendedBoxWidthMultiplier", 1.4f);
+        _extendedBoxHeightMultiplier = configuration.GetValue("AccessoryDetection:ExtendedBoxHeightMultiplier", 1.2f);
 
         // Try to load ONNX model if configured
         var modelPath = configuration["AccessoryDetection:ModelPath"];
@@ -104,6 +111,11 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
 
     public AccessoryDetectionResult DetectAccessoriesFromYolo(BoundingBox personBox, List<DetectedObject> allAccessories)
     {
+        return DetectAccessoriesFromYolo(personBox, allAccessories, null);
+    }
+
+    public AccessoryDetectionResult DetectAccessoriesFromYolo(BoundingBox personBox, List<DetectedObject> allAccessories, AccessoryMatchingDiagnostics? diagnostics)
+    {
         _logger.LogAccessoryDetectionStart(personBox.X, personBox.Y, personBox.Width, personBox.Height, allAccessories.Count);
         
         var result = new AccessoryDetectionResult();
@@ -120,7 +132,31 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 accessory.BoundingBox.Width,
                 accessory.BoundingBox.Height);
 
-            var isAssociated = IsAccessoryAssociatedWithPerson(personBox, accessory.BoundingBox);
+            // Calculate association with detailed diagnostics
+            var (isAssociated, iou, withinExtendedBounds, reason) = IsAccessoryAssociatedWithPersonDetailed(personBox, accessory.BoundingBox, accessory.ObjectType);
+            
+            // Record association attempt if diagnostics enabled
+            if (diagnostics != null)
+            {
+                var attempt = new AccessoryAssociationAttempt
+                {
+                    AccessoryType = accessory.ObjectType,
+                    AccessoryConfidence = accessory.BoundingBox.Confidence,
+                    AccessoryBox = new BoundingBoxDiagnostics
+                    {
+                        X = accessory.BoundingBox.X,
+                        Y = accessory.BoundingBox.Y,
+                        Width = accessory.BoundingBox.Width,
+                        Height = accessory.BoundingBox.Height,
+                        Confidence = accessory.BoundingBox.Confidence
+                    },
+                    IoUScore = iou,
+                    WithinExtendedBounds = withinExtendedBounds,
+                    WasAssociated = isAssociated,
+                    AssociationReason = reason
+                };
+                diagnostics.AssociationAttempts.Add(attempt);
+            }
             
             if (isAssociated)
             {
@@ -131,17 +167,29 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
                 if (AccessoryTypes.Contains(accessory.ObjectType))
                 {
                     result.Accessories.Add(detectedItem);
+                    if (diagnostics != null)
+                    {
+                        diagnostics.AssociatedAccessories.Add($"{accessory.ObjectType} (conf: {accessory.BoundingBox.Confidence:F2})");
+                    }
                     _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as accessory");
                 }
                 else if (ClothingTypes.Contains(accessory.ObjectType))
                 {
                     result.ClothingItems.Add(detectedItem);
+                    if (diagnostics != null)
+                    {
+                        diagnostics.AssociatedClothing.Add($"{accessory.ObjectType} (conf: {accessory.BoundingBox.Confidence:F2})");
+                    }
                     _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as clothing");
                 }
                 else
                 {
                     // Unknown type but spatially associated
                     result.Accessories.Add(detectedItem);
+                    if (diagnostics != null)
+                    {
+                        diagnostics.AssociatedAccessories.Add($"{accessory.ObjectType} (conf: {accessory.BoundingBox.Confidence:F2})");
+                    }
                     _logger.LogAccessoryAssociationResult(accessory.ObjectType, true, "IoU or proximity match - classified as accessory (unknown type)");
                 }
             }
@@ -157,24 +205,32 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
 
     private bool IsAccessoryAssociatedWithPerson(BoundingBox personBox, BoundingBox accessoryBox)
     {
+        var (isAssociated, _, _, _) = IsAccessoryAssociatedWithPersonDetailed(personBox, accessoryBox, "unknown");
+        return isAssociated;
+    }
+
+    private (bool isAssociated, float iou, bool withinExtendedBounds, string reason) IsAccessoryAssociatedWithPersonDetailed(
+        BoundingBox personBox, BoundingBox accessoryBox, string accessoryType)
+    {
         // Check if accessory overlaps with person or is very close to person
         // Method 1: Check IoU (Intersection over Union)
         var iou = CalculateIoU(personBox, accessoryBox);
         
-        if (iou > MinIouThreshold) // Even small overlap means association
+        if (iou > _minIouThreshold) // Even small overlap means association
         {
-            _logger.LogDebug("IoU {IoU:F4} > threshold {Threshold:F4}, accessory is associated via overlap", iou, MinIouThreshold);
-            return true;
+            var reason = $"IoU {iou:F4} > threshold {_minIouThreshold:F4}, associated via overlap";
+            _logger.LogDebug(reason);
+            return (true, iou, false, reason);
         }
 
         // Method 2: Check if accessory is within extended person boundary
         // Accessories like backpacks may extend slightly beyond person box
         var extendedPersonBox = new BoundingBox
         {
-            X = personBox.X - personBox.Width * ExtendedBoxLeftRightFactor,
-            Y = personBox.Y - personBox.Height * ExtendedBoxTopFactor,
-            Width = personBox.Width * ExtendedBoxWidthMultiplier,
-            Height = personBox.Height * ExtendedBoxHeightMultiplier
+            X = personBox.X - personBox.Width * _extendedBoxLeftRightFactor,
+            Y = personBox.Y - personBox.Height * _extendedBoxTopFactor,
+            Width = personBox.Width * _extendedBoxWidthMultiplier,
+            Height = personBox.Height * _extendedBoxHeightMultiplier
         };
 
         var accessoryCenterX = accessoryBox.X + accessoryBox.Width / 2;
@@ -191,7 +247,21 @@ public class AccessoryDetectionService : IAccessoryDetectionService, IDisposable
             extendedPersonBox.Width, extendedPersonBox.Height,
             within);
 
-        return within;
+        string detailedReason;
+        if (within)
+        {
+            detailedReason = $"Center ({accessoryCenterX:F1}, {accessoryCenterY:F1}) within extended bounds " +
+                           $"({extendedPersonBox.X:F1}, {extendedPersonBox.Y:F1}, " +
+                           $"W:{extendedPersonBox.Width:F1}, H:{extendedPersonBox.Height:F1}), IoU={iou:F4}";
+        }
+        else
+        {
+            detailedReason = $"IoU {iou:F4} < threshold {_minIouThreshold:F4}, center ({accessoryCenterX:F1}, {accessoryCenterY:F1}) " +
+                           $"outside extended bounds ({extendedPersonBox.X:F1}, {extendedPersonBox.Y:F1}, " +
+                           $"W:{extendedPersonBox.Width:F1}, H:{extendedPersonBox.Height:F1})";
+        }
+
+        return (within, iou, within, detailedReason);
     }
 
     private float CalculateIoU(BoundingBox box1, BoundingBox box2)
