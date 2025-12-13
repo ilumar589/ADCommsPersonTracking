@@ -539,7 +539,7 @@ public class PersonTrackingController : ControllerBase
 
     private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames, string? diagnosticsSessionId = null)
     {
-        // Progress weights: 20% conversion, 60% processing, 20% finalizing
+        // Progress weights: 20% conversion, 60% processing (remaining 20% for finalizing is implicit)
         const int ConversionProgressWeight = 20;
         const int ProcessingProgressWeight = 60;
         

@@ -47,6 +47,7 @@ public class PersonTrackingService : IPersonTrackingService
     {
         var diagnosticsSessionId = request.DiagnosticsSessionId;
         var hasDiagnostics = !string.IsNullOrEmpty(diagnosticsSessionId) && _diagnosticsService.IsEnabled;
+        var startTime = DateTime.UtcNow;
         
         try
         {
@@ -365,13 +366,14 @@ public class PersonTrackingService : IPersonTrackingService
             // Record processing summary in diagnostics
             if (hasDiagnostics)
             {
+                var processingDuration = DateTime.UtcNow - startTime;
                 var summary = new ProcessingSummary
                 {
                     TotalImagesProcessed = request.ImagesBase64.Count,
                     TotalPersonsDetected = totalDetections,
                     TotalAccessoriesDetected = totalAccessoriesDetected,
                     PersonsMatchingCriteria = totalMatchedDetections,
-                    ProcessingDuration = TimeSpan.Zero // TODO: Add timing if needed
+                    ProcessingDuration = processingDuration
                 };
                 _diagnosticsService.SetProcessingSummary(diagnosticsSessionId!, summary);
             }
