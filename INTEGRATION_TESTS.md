@@ -16,7 +16,7 @@ These tests use the actual production code (`ObjectDetectionService`) with the r
 
 ### Required Software
 - .NET 10 SDK
-- YOLO11 ONNX model (yolo11n.onnx)
+- YOLO11 ONNX model (yolo11m.onnx)
 
 ### Download the YOLO11 Model
 
@@ -34,11 +34,11 @@ python download-model.py
 #### Option 2: Manual Download with Ultralytics
 ```bash
 pip install ultralytics
-python -c "from ultralytics import YOLO; model = YOLO('yolo11n.pt'); model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)"
-mv yolo11n.onnx models/
+python -c "from ultralytics import YOLO; model = YOLO('yolo11m.pt'); model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)"
+mv yolo11m.onnx models/
 ```
 
-The model will be saved to `models/yolo11n.onnx` (~11MB).
+The model will be saved to `models/yolo11m.onnx` (~50MB).
 
 ## Running the Integration Tests
 
@@ -135,7 +135,7 @@ The integration tests directly use the C# `ObjectDetectionService` with the actu
 
 ### Key Files
 - `ADCommsPersonTracking.Tests/Integration/YoloIntegrationTests.cs` - Integration test suite
-- `models/yolo11n.onnx` - YOLO11 model (downloaded via script, not committed)
+- `models/yolo11m.onnx` - YOLO11 model (downloaded via script, not committed)
 - `ADCommsPersonTracking.Tests/TestData/Images/` - Test images
 
 ## CI/CD Considerations
@@ -174,7 +174,7 @@ jobs:
 
 ### Model Not Found
 ```
-InvalidOperationException: YOLO11 model not found at models/yolo11n.onnx
+InvalidOperationException: YOLO11 model not found at models/yolo11m.onnx
 ```
 **Solution**: Run `python download-model.py` to download the model before running integration tests.
 

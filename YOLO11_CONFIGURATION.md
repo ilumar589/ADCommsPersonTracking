@@ -13,7 +13,7 @@ The system uses **local ONNX inference** for YOLO11 object detection. The YOLO11
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11n.onnx",
+    "ModelPath": "models/yolo11m.onnx",
     "ConfidenceThreshold": 0.45,
     "IouThreshold": 0.5
   }
@@ -25,7 +25,7 @@ The system uses **local ONNX inference** for YOLO11 object detection. The YOLO11
 **ObjectDetection:ModelPath**
 - Path to the local YOLO11 ONNX model file
 - Required for object detection to work
-- Default: `models/yolo11n.onnx`
+- Default: `models/yolo11m.onnx`
 
 **ObjectDetection:ConfidenceThreshold**
 - Minimum confidence score for detections (0.0 to 1.0)
@@ -40,9 +40,9 @@ The system uses **local ONNX inference** for YOLO11 object detection. The YOLO11
 The system uses a Docker container to export YOLO11 models to ONNX format. This is a one-time operation that creates the model file in the shared `models/` directory.
 
 **Model Options:**
-- `yolo11n.onnx` (nano) - Fastest, smallest (~6MB)
+- `yolo11n.onnx` (nano) - Fastest, smallest (~6MB) - for old hardware
 - `yolo11s.onnx` (small) - Good balance (~22MB)
-- `yolo11m.onnx` (medium) - Better accuracy (~50MB)
+- `yolo11m.onnx` (medium) - Better accuracy (~50MB) - default, recommended
 - `yolo11l.onnx` (large) - High accuracy (~87MB)
 - `yolo11x.onnx` (extra large) - Best accuracy (~136MB)
 
@@ -92,7 +92,7 @@ dotnet run
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11n.onnx"
+    "ModelPath": "models/yolo11m.onnx"
   }
 }
 ```
@@ -119,9 +119,9 @@ The system uses a single detection service that performs local ONNX inference:
 The system provides logging for detection operations:
 
 ```
-[Information] YOLO11 ONNX model loaded successfully from models/yolo11n.onnx
+[Information] YOLO11 ONNX model loaded successfully from models/yolo11m.onnx
 [Information] Detected 3 persons in frame
-[Warning] YOLO11 ONNX model not found at models/yolo11n.onnx. Detection will use mock data.
+[Warning] YOLO11 ONNX model not found at models/yolo11m.onnx. Detection will use mock data.
 ```
 
 ## Performance
@@ -141,15 +141,15 @@ The system provides logging for detection operations:
 
 ### ONNX Model Not Found
 
-**Symptom**: Logs show "YOLO11 model not found at models/yolo11n.onnx"
+**Symptom**: Logs show "YOLO11 model not found at models/yolo11m.onnx"
 
 **Solutions**:
 1. Download the model: `python download-model.py`
 2. Or manually export using Python: 
    ```bash
    pip install ultralytics
-   python -c "from ultralytics import YOLO; model = YOLO('yolo11n.pt'); model.export(format='onnx')"
-   mv yolo11n.onnx models/
+   python -c "from ultralytics import YOLO; model = YOLO('yolo11m.pt'); model.export(format='onnx')"
+   mv yolo11m.onnx models/
    ```
 3. Or use the Docker export container:
    ```bash
@@ -165,7 +165,7 @@ The system provides logging for detection operations:
 **Solutions**:
 1. Verify the ONNX model exists at the configured path
 2. Check file permissions on the model file
-3. Ensure the model file is not corrupted (should be ~6MB for yolo11n)
+3. Ensure the model file is not corrupted (should be ~50MB for yolo11m)
 4. Check application logs for specific error messages
 
 ### Performance Issues
@@ -173,7 +173,7 @@ The system provides logging for detection operations:
 **Symptom**: Slow detection times
 
 **Solutions**:
-1. Use smaller model variant (yolo11n.onnx) for faster inference
+1. Use smaller model variant (yolo11n.onnx or yolo11s.onnx) for faster inference
 2. Reduce input image resolution before processing
 3. Check system resources (CPU/Memory)
 4. Consider using ONNX Runtime with GPU support if available
@@ -201,9 +201,9 @@ dotnet test
 ## Best Practices
 
 1. **Model Selection**:
-   - `yolo11n.onnx`: Development, low-resource environments (~6MB)
+   - `yolo11n.onnx`: Low-resource environments, old hardware (~6MB)
    - `yolo11s.onnx`: Balanced performance/accuracy (~22MB)
-   - `yolo11m.onnx`: Production with good hardware (~50MB)
+   - `yolo11m.onnx`: Recommended default, better accessory detection (~50MB)
    - `yolo11l.onnx` / `yolo11x.onnx`: Maximum accuracy (~87MB / ~136MB)
 
 2. **Image Processing**:

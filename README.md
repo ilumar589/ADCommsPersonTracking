@@ -40,7 +40,7 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 
 - .NET 10 SDK
 - Docker Desktop (for running with Aspire)
-- YOLO11 ONNX model (yolo11n.onnx, yolo11s.onnx, or other variants) - required for person detection
+- YOLO11 ONNX model (yolo11m.onnx recommended, or other variants) - required for person detection
 - **FFmpeg binaries are automatically downloaded** on first video upload (no manual installation required)
 
 ## Installation
@@ -65,24 +65,24 @@ cd ADCommsPersonTracking
    ```python
    from ultralytics import YOLO
    
-   # Download and load YOLO11 nano model (fastest, smallest)
-   model = YOLO('yolo11n.pt')
+   # Download and load YOLO11 medium model (better accuracy)
+   model = YOLO('yolo11m.pt')
    
    # Export to ONNX format
    model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)
    ```
-4. Move the generated `yolo11n.onnx` to `ADCommsPersonTracking.Api/models/`:
+4. Move the generated `yolo11m.onnx` to `ADCommsPersonTracking.Api/models/`:
    ```bash
    mkdir -p ADCommsPersonTracking.Api/models
-   mv yolo11n.onnx ADCommsPersonTracking.Api/models/
+   mv yolo11m.onnx ADCommsPersonTracking.Api/models/
    ```
 
 #### Option 2: Download Pre-exported Model
 
 Download from Ultralytics GitHub releases or HuggingFace:
-- **yolo11n.onnx** (~6MB) - Nano, fastest (recommended for old hardware)
+- **yolo11n.onnx** (~6MB) - Nano, fastest (for old hardware)
 - **yolo11s.onnx** (~22MB) - Small
-- **yolo11m.onnx** (~50MB) - Medium
+- **yolo11m.onnx** (~50MB) - Medium (recommended, default)
 - **yolo11l.onnx** (~87MB) - Large
 - **yolo11x.onnx** (~136MB) - Extra Large
 
@@ -116,7 +116,7 @@ This will:
 - Configure automatic service discovery between components
 
 The model export container will:
-- Download the YOLO11n model if not already present
+- Download the YOLO11m model if not already present
 - Export it to ONNX format
 - Save it to the `models/` directory (shared via bind mount)
 - Exit after completion
@@ -222,34 +222,34 @@ docker run --rm -v "%cd%/../../models:/models" yolo-model-export:latest
 
 **Linux/macOS:**
 ```bash
-ls -la ../../models/yolo11n.onnx
+ls -la ../../models/yolo11m.onnx
 ```
 
 **Windows PowerShell:**
 ```powershell
-Get-ChildItem ../../models/yolo11n.onnx
+Get-ChildItem ../../models/yolo11m.onnx
 ```
 
 **Windows Command Prompt:**
 ```cmd
-dir ..\..\models\yolo11n.onnx
+dir ..\..\models\yolo11m.onnx
 ```
 
-You should see a file approximately 6MB in size.
+You should see a file approximately 50MB in size.
 
 ### What the Container Does
 
 The `yolo-model-export` container performs the following operations:
 
-1. **Downloads YOLO11n Pre-trained Weights** (~6MB) from Ultralytics if not already present
+1. **Downloads YOLO11m Pre-trained Weights** (~50MB) from Ultralytics if not already present
 2. **Exports to ONNX Format** using the Ultralytics library with optimizations:
    - Simplified model structure
    - Fixed input size (640x640)
    - Static batch size for better performance
-3. **Saves to Models Directory** - The exported `yolo11n.onnx` file is saved to the `models/` directory through the volume mount
+3. **Saves to Models Directory** - The exported `yolo11m.onnx` file is saved to the `models/` directory through the volume mount
 4. **Exits Automatically** - The container completes and exits after the export is finished
 
-The entire process typically takes 1-2 minutes on the first run when downloading weights from the internet.
+The entire process typically takes 2-5 minutes on the first run when downloading weights from the internet.
 
 ### Running with .NET Aspire
 
@@ -311,11 +311,11 @@ docker run --rm -v "/absolute/path/to/models:/models" yolo-model-export:latest
 
 **Issue:** The first run may take several minutes.
 
-**Explanation:** On the first run, the container downloads the YOLO11n pre-trained weights (~6MB) from the internet. Subsequent runs will be much faster if the model already exists.
+**Explanation:** On the first run, the container downloads the YOLO11m pre-trained weights (~50MB) from the internet. Subsequent runs will be much faster if the model already exists.
 
 **Solution:** 
 - Ensure you have a stable internet connection
-- Wait for the download to complete (typically 1-2 minutes)
+- Wait for the download to complete (typically 2-5 minutes)
 - If the download fails, delete any partial files in the `models/` directory and try again
 
 #### Docker Daemon Not Running
@@ -493,7 +493,7 @@ Edit `appsettings.json` to configure the application:
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11n.onnx",
+    "ModelPath": "models/yolo11m.onnx",
     "ConfidenceThreshold": 0.45,
     "IouThreshold": 0.5
   },
@@ -510,9 +510,9 @@ Edit `appsettings.json` to configure the application:
 
 The system supports different YOLO11 model sizes:
 
-- **yolo11n.onnx**: Nano - Fastest, lowest accuracy (recommended for old hardware)
+- **yolo11n.onnx**: Nano - Fastest, lowest accuracy (for old hardware)
 - **yolo11s.onnx**: Small - Good balance
-- **yolo11m.onnx**: Medium - Better accuracy
+- **yolo11m.onnx**: Medium - Better accuracy (default, recommended)
 - **yolo11l.onnx**: Large - High accuracy
 - **yolo11x.onnx**: Extra Large - Best accuracy, slowest
 
@@ -522,7 +522,7 @@ Update the `ModelPath` in `appsettings.json` to use different models.
 
 For old hardware, consider:
 
-1. Use `yolo11n.onnx` (nano model)
+1. Use `yolo11n.onnx` (nano model) or `yolo11s.onnx` (small model)
 2. Reduce input frame resolution before sending to API
 3. Process frames at lower FPS (e.g., 2-5 FPS instead of 30 FPS)
 4. Use CPU optimization flags in ONNX Runtime
@@ -592,15 +592,15 @@ The system maintains person tracks across cameras by:
 
 ### For Old Hardware
 
-- **Model**: Use YOLO11n (nano) for best performance
+- **Model**: Use YOLO11n (nano) or YOLO11s (small) for best performance
 - **Resolution**: Process frames at 640x640 or lower
 - **Frame Rate**: 2-5 FPS is sufficient for tracking
 - **Batch Processing**: Process multiple frames from different cameras in batches
 
 ### Memory Usage
 
-- YOLO11n: ~6MB model size, ~200MB runtime memory
-- Claude API: Network calls only, no local memory impact
+- YOLO11m: ~50MB model size, ~400MB runtime memory
+- YOLO11n: ~6MB model size, ~200MB runtime memory (for older hardware)
 - Tracking: ~1KB per active track
 
 ## Troubleshooting
