@@ -68,7 +68,7 @@ public class PersonTrackingApiService : IPersonTrackingApiService
         }
     }
 
-    public async Task<VideoUploadResponse?> UploadVideoAsync(Stream videoStream, string fileName)
+    public async Task<VideoUploadJobResponse?> UploadVideoAsync(Stream videoStream, string fileName)
     {
         try
         {
@@ -101,7 +101,7 @@ public class PersonTrackingApiService : IPersonTrackingApiService
 
                 var response = await _httpClient.PostAsync("api/persontracking/video/upload", content);
                 response.EnsureSuccessStatusCode();
-                return await response.Content.ReadFromJsonAsync<VideoUploadResponse>();
+                return await response.Content.ReadFromJsonAsync<VideoUploadJobResponse>();
             }
             finally
             {
@@ -114,6 +114,19 @@ public class PersonTrackingApiService : IPersonTrackingApiService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error uploading video: {FileName}", fileName);
+            return null;
+        }
+    }
+
+    public async Task<VideoUploadJobStatus?> GetVideoUploadStatusAsync(string jobId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<VideoUploadJobStatus>($"api/persontracking/video/upload/status/{jobId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting video upload status: {JobId}", jobId);
             return null;
         }
     }

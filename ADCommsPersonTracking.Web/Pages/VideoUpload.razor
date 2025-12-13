@@ -2,6 +2,7 @@
 @inject IPersonTrackingApiService ApiService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@implements IDisposable
 
 <PageTitle>Video Upload - ADComms Person Tracking</PageTitle>
 
@@ -32,8 +33,10 @@
 
                 @if (_uploading)
                 {
-                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
-                    <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">Processing video...</MudText>
+                    <MudProgressLinear Color="Color.Primary" Value="@_progressPercentage" Class="mt-4" />
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                        @_currentStep (@_progressPercentage%)
+                    </MudText>
                 }
 
                 <MudButton Variant="Variant.Filled" 
@@ -106,12 +109,25 @@
     private string _fileName = string.Empty;
     private bool _uploading = false;
     private VideoUploadResponse? _uploadResponse;
+    private string? _currentJobId;
+    private int _progressPercentage = 0;
+    private string _currentStep = string.Empty;
+    private CancellationTokenSource? _pollingCancellation;
+
+    public void Dispose()
+    {
+        _pollingCancellation?.Cancel();
+        _pollingCancellation?.Dispose();
+    }
 
     private void HandleFileSelected(IBrowserFile file)
     {
         _selectedFile = file;
         _fileName = file?.Name ?? string.Empty;
         _uploadResponse = null;
+        _currentJobId = null;
+        _progressPercentage = 0;
+        _currentStep = string.Empty;
         
         if (file != null)
         {
@@ -129,37 +145,95 @@
 
         _uploading = true;
         _uploadResponse = null;
+        _progressPercentage = 0;
+        _currentStep = "Starting upload...";
+
+        // Cancel any existing polling
+        _pollingCancellation?.Cancel();
+        _pollingCancellation = new CancellationTokenSource();
 
         try
         {
             const long maxFileSize = 500 * 1024 * 1024; // 500MB max
             
             using var stream = _selectedFile.OpenReadStream(maxFileSize);
-            _uploadResponse = await ApiService.UploadVideoAsync(stream, _selectedFile.Name);
+            var jobResponse = await ApiService.UploadVideoAsync(stream, _selectedFile.Name);
 
-            if (_uploadResponse != null)
+            if (jobResponse != null)
             {
-                if (_uploadResponse.WasCached)
-                {
-                    Snackbar.Add("Video was already processed. Using cached result.", Severity.Info);
-                }
-                else
-                {
-                    Snackbar.Add($"Video processed successfully! Extracted {_uploadResponse.FrameCount} frames.", Severity.Success);
-                }
+                _currentJobId = jobResponse.JobId;
+                Snackbar.Add("Video upload started. Processing...", Severity.Info);
+                
+                // Start polling for status
+                await PollUploadStatus(_pollingCancellation.Token);
             }
             else
             {
                 Snackbar.Add("Failed to upload video", Severity.Error);
+                _uploading = false;
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error uploading video: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
             _uploading = false;
+        }
+    }
+
+    private async Task PollUploadStatus(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && _currentJobId != null)
+        {
+            try
+            {
+                await Task.Delay(1500, cancellationToken); // Poll every 1.5 seconds
+                
+                var status = await ApiService.GetVideoUploadStatusAsync(_currentJobId);
+                
+                if (status == null)
+                {
+                    Snackbar.Add("Failed to get upload status", Severity.Error);
+                    _uploading = false;
+                    break;
+                }
+
+                _progressPercentage = status.ProgressPercentage;
+                _currentStep = status.CurrentStep;
+                StateHasChanged();
+
+                if (status.Status == "Completed")
+                {
+                    // Create a response object for the UI
+                    _uploadResponse = new VideoUploadResponse
+                    {
+                        TrackingId = status.TrackingId ?? string.Empty,
+                        FrameCount = status.FrameCount ?? 0,
+                        WasCached = false,
+                        Message = $"Video processed successfully! Extracted {status.FrameCount ?? 0} frames."
+                    };
+                    
+                    Snackbar.Add($"Video processed successfully! Extracted {status.FrameCount ?? 0} frames.", Severity.Success);
+                    _uploading = false;
+                    break;
+                }
+                else if (status.Status == "Failed")
+                {
+                    Snackbar.Add($"Video processing failed: {status.ErrorMessage}", Severity.Error);
+                    _uploading = false;
+                    break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Polling was cancelled, exit gracefully
+                break;
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error checking upload status: {ex.Message}", Severity.Error);
+                _uploading = false;
+                break;
+            }
         }
     }
 
