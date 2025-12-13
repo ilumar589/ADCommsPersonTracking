@@ -146,7 +146,7 @@ The Aspire Dashboard provides:
 
 The API service receives the model path via environment variable:
 ```
-ObjectDetection__ModelPath = /path/to/models/yolo11m.onnx
+ObjectDetection__ModelPath = /path/to/models/yolo11x.onnx
 ```
 
 The API loads the ONNX model and performs local inference using ONNX Runtime.

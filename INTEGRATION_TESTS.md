@@ -16,7 +16,7 @@ These tests use the actual production code (`ObjectDetectionService`) with the r
 
 ### Required Software
 - .NET 10 SDK
-- YOLO11 ONNX model (yolo11m.onnx)
+- YOLO11 ONNX model (yolo11x.onnx)
 
 ### Download the YOLO11 Model
 
@@ -34,11 +34,11 @@ python download-model.py
 #### Option 2: Manual Download with Ultralytics
 ```bash
 pip install ultralytics
-python -c "from ultralytics import YOLO; model = YOLO('yolo11m.pt'); model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)"
-mv yolo11m.onnx models/
+python -c "from ultralytics import YOLO; model = YOLO('yolo11x.pt'); model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)"
+mv yolo11x.onnx models/
 ```
 
-The model will be saved to `models/yolo11m.onnx` (~50MB).
+The model will be saved to `models/yolo11x.onnx` (~136MB).
 
 ## Running the Integration Tests
 
