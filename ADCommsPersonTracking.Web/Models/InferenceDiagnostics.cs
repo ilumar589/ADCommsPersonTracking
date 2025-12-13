@@ -114,10 +114,7 @@ public class ProcessingSummary
     public TimeSpan ProcessingDuration { get; set; }
 }
 
-public class TrackByIdWithDiagnosticsResponse
+public class TrackByIdWithDiagnosticsResponse : TrackByIdJobResponse
 {
-    public string JobId { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public int TotalFrames { get; set; }
     public string DiagnosticsSessionId { get; set; } = string.Empty;
 }

@@ -360,13 +360,6 @@ public class PersonTrackingService : IPersonTrackingService
         }
     }
 
-    public async Task<TrackingResponse> ProcessFrameWithDiagnosticsAsync(TrackingRequest request, string diagnosticsSessionId)
-    {
-        // This method wraps ProcessFrameAsync with additional diagnostics collection
-        // For now, just call the existing method - diagnostics are collected via logging
-        return await ProcessFrameAsync(request);
-    }
-
     public Task<List<PersonTrack>> GetActiveTracksAsync()
     {
         var now = DateTime.UtcNow;

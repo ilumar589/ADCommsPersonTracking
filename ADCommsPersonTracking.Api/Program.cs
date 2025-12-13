@@ -23,7 +23,12 @@ builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>()
 builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IAccessoryDetectionService, AccessoryDetectionService>();
 builder.Services.AddSingleton<IPhysicalAttributeEstimator, PhysicalAttributeEstimator>();
-builder.Services.AddSingleton<IInferenceDiagnosticsService, InferenceDiagnosticsService>();
+
+// Register diagnostics service as both singleton and hosted service
+builder.Services.AddSingleton<InferenceDiagnosticsService>();
+builder.Services.AddSingleton<IInferenceDiagnosticsService>(sp => sp.GetRequiredService<InferenceDiagnosticsService>());
+builder.Services.AddHostedService<InferenceDiagnosticsService>(sp => sp.GetRequiredService<InferenceDiagnosticsService>());
+
 builder.Services.AddSingleton<IPersonTrackingService, PersonTrackingService>();
 
 // Add Azure Blob Storage client

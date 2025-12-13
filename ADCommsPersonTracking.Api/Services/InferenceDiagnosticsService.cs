@@ -1,10 +1,11 @@
 using ADCommsPersonTracking.Api.Models;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Microsoft.Extensions.Hosting;
 
 namespace ADCommsPersonTracking.Api.Services;
 
-public class InferenceDiagnosticsService : IInferenceDiagnosticsService
+public class InferenceDiagnosticsService : IInferenceDiagnosticsService, IHostedService
 {
     private readonly ConcurrentDictionary<string, InferenceDiagnostics> _sessions = new();
     private readonly IConfiguration _configuration;
@@ -35,13 +36,30 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService
             SingleReader = true, // Only one background task will read from this channel
             SingleWriter = false // Multiple threads may write diagnostics
         });
+    }
 
-        // Start background tasks
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
         if (IsEnabled)
         {
-            _ = Task.Run(() => ProcessDiagnosticsAsync(_cancellationTokenSource.Token));
-            _ = Task.Run(() => CleanupOldSessionsAsync(_cancellationTokenSource.Token));
+            // Start background tasks as long-running tasks on dedicated threads
+            _ = Task.Factory.StartNew(
+                () => ProcessDiagnosticsAsync(_cancellationTokenSource.Token),
+                TaskCreationOptions.LongRunning);
+            
+            _ = Task.Factory.StartNew(
+                () => CleanupOldSessionsAsync(_cancellationTokenSource.Token),
+                TaskCreationOptions.LongRunning);
         }
+        
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _cancellationTokenSource?.Cancel();
+        _diagnosticsChannel.Writer.Complete();
+        return Task.CompletedTask;
     }
 
     public string StartSession(string trackingId, string prompt)
