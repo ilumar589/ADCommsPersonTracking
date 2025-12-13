@@ -84,12 +84,7 @@
                             }
 
                             @{
-                                var matchedImages = _trackingResponse.Results
-                                    .Where(r => r.Detections.Any(d => d.MatchedCriteria.Any()))
-                                    .ToList();
-                                var unmatchedImages = _trackingResponse.Results
-                                    .Where(r => !r.Detections.Any() || r.Detections.All(d => !d.MatchedCriteria.Any()))
-                                    .ToList();
+                                var (matchedImages, unmatchedImages) = CategorizeImages(_trackingResponse.Results);
                             }
 
                             <MudExpansionPanels MultiExpansion="true">
@@ -282,12 +277,7 @@
                             }
 
                             @{
-                                var matchedImages = _trackingResponse.Results
-                                    .Where(r => r.Detections.Any(d => d.MatchedCriteria.Any()))
-                                    .ToList();
-                                var unmatchedImages = _trackingResponse.Results
-                                    .Where(r => !r.Detections.Any() || r.Detections.All(d => !d.MatchedCriteria.Any()))
-                                    .ToList();
+                                var (matchedImages, unmatchedImages) = CategorizeImages(_trackingResponse.Results);
                             }
 
                             <MudExpansionPanels MultiExpansion="true">
@@ -437,6 +427,17 @@
             _trackingIdInput = TrackingIdFromQuery;
             _activeTabIndex = 1; // Switch to "Use Tracking ID" tab
         }
+    }
+
+    private (List<ImageDetectionResult> matchedImages, List<ImageDetectionResult> unmatchedImages) CategorizeImages(List<ImageDetectionResult> results)
+    {
+        var matchedImages = results
+            .Where(r => r.Detections.Any(d => d.MatchedCriteria.Any()))
+            .ToList();
+        var unmatchedImages = results
+            .Where(r => !r.Detections.Any() || r.Detections.All(d => !d.MatchedCriteria.Any()))
+            .ToList();
+        return (matchedImages, unmatchedImages);
     }
 
     private async Task HandleFileSelected(IBrowserFile file)
