@@ -129,7 +129,7 @@ Result: "12 persons matching criteria: accessories: backpack"
 ## Configuration
 
 No configuration changes required. The system automatically:
-- Uses existing YOLO11 model (`models/yolo11n.onnx`)
+- Uses existing YOLO11 model (`models/yolo11m.onnx`)
 - Detects accessories when search criteria include clothing/accessory terms
 - Falls back to person-only detection when no accessories are searched
 
