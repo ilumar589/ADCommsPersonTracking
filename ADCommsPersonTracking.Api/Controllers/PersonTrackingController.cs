@@ -539,8 +539,9 @@ public class PersonTrackingController : ControllerBase
 
     private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames, string? diagnosticsSessionId = null)
     {
-        const int ConversionProgressWeight = 20; // 20% for conversion
-        const int ProcessingProgressWeight = 60; // 60% for actual processing
+        // Progress weights: 20% conversion, 60% processing, 20% finalizing
+        const int ConversionProgressWeight = 20;
+        const int ProcessingProgressWeight = 60;
         
         try
         {
@@ -551,11 +552,17 @@ public class PersonTrackingController : ControllerBase
             
             if (totalFrames == 0)
             {
-                _logger.LogWarning("No frames to process for tracking ID {TrackingId}", request.TrackingId);
+                var errorMessage = "No frames to process - frame list is empty";
+                _logger.LogWarning("{ErrorMessage} for tracking ID {TrackingId}", errorMessage, request.TrackingId);
+                
                 if (!string.IsNullOrEmpty(diagnosticsSessionId))
                 {
-                    _diagnosticsService.AddWarning(diagnosticsSessionId, "No frames to process - frame list is empty");
+                    _diagnosticsService.AddWarning(diagnosticsSessionId, errorMessage);
+                    _diagnosticsService.EndSession(diagnosticsSessionId);
                 }
+                
+                _trackByIdJobService.FailJob(jobId, errorMessage);
+                return;
             }
             
             _trackByIdJobService.UpdateProgress(jobId, 0, "Converting frames to base64");

@@ -80,6 +80,7 @@ public class PersonTrackingService : IPersonTrackingService
 
             var totalDetections = 0;
             var totalMatchedDetections = 0;
+            var totalAccessoriesDetected = 0;
             var resultsLock = new object();
 
             // Check if we have any criteria
@@ -142,6 +143,11 @@ public class PersonTrackingService : IPersonTrackingService
                             allAccessories = allObjects.Where(o => o.ClassId != 0).ToList();
 
                             _logger.LogYoloDetectionSummary(imageIndex, allObjects.Count, detections.Count, allAccessories.Count);
+                            
+                            lock (resultsLock)
+                            {
+                                totalAccessoriesDetected += allAccessories.Count;
+                            }
 
                             // Log each YOLO detection
                             foreach (var obj in allObjects)
@@ -363,6 +369,7 @@ public class PersonTrackingService : IPersonTrackingService
                 {
                     TotalImagesProcessed = request.ImagesBase64.Count,
                     TotalPersonsDetected = totalDetections,
+                    TotalAccessoriesDetected = totalAccessoriesDetected,
                     PersonsMatchingCriteria = totalMatchedDetections,
                     ProcessingDuration = TimeSpan.Zero // TODO: Add timing if needed
                 };
