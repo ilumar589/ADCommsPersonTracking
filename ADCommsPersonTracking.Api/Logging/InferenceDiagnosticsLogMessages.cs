@@ -306,4 +306,13 @@ public static partial class InferenceDiagnosticsLogMessages
         this ILogger logger,
         bool matches,
         string matchedItem);
+
+    [LoggerMessage(
+        EventId = 139,
+        Level = LogLevel.Warning,
+        Message = "Image {ImageIndex} - Searching for accessories [{SearchedAccessories}] but YOLO detected 0 accessories/items in the image")]
+    public static partial void LogNoAccessoriesDetectedWarning(
+        this ILogger logger,
+        int imageIndex,
+        string searchedAccessories);
 }
