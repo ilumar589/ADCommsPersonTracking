@@ -171,4 +171,45 @@ public class PersonTrackingApiService : IPersonTrackingApiService
             return null;
         }
     }
+
+    public async Task<TrackByIdWithDiagnosticsResponse?> TrackByIdWithDiagnosticsAsync(TrackByIdRequest request)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/persontracking/track-by-id-with-diagnostics", request);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<TrackByIdWithDiagnosticsResponse>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting track-by-id with diagnostics request: {TrackingId}", request.TrackingId);
+            return null;
+        }
+    }
+
+    public async Task<InferenceDiagnostics?> GetDiagnosticsAsync(string sessionId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<InferenceDiagnostics>($"api/persontracking/diagnostics/{sessionId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting diagnostics: {SessionId}", sessionId);
+            return null;
+        }
+    }
+
+    public async Task<InferenceDiagnostics?> GetLatestDiagnosticsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<InferenceDiagnostics>("api/persontracking/diagnostics/latest");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting latest diagnostics");
+            return null;
+        }
+    }
 }
