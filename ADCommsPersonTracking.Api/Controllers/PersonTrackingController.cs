@@ -109,11 +109,12 @@ public class PersonTrackingController : ControllerBase
     /// Upload a video file, extract frames, and store them in Azure Blob Storage
     /// </summary>
     /// <param name="video">Video file to process</param>
+    /// <param name="maxFrames">Maximum number of frames to extract (optional)</param>
     /// <returns>Video upload job response with job ID for tracking progress</returns>
     [HttpPost("video/upload")]
     [ProducesResponseType(typeof(VideoUploadJobResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<VideoUploadJobResponse>> UploadVideo(IFormFile video)
+    public async Task<ActionResult<VideoUploadJobResponse>> UploadVideo(IFormFile video, [FromQuery] int? maxFrames = null)
     {
         if (video == null || video.Length == 0)
         {
@@ -158,7 +159,7 @@ public class PersonTrackingController : ControllerBase
         {
             try
             {
-                await ProcessVideoInBackground(job.JobId, videoName, tempFilePath);
+                await ProcessVideoInBackground(job.JobId, videoName, tempFilePath, maxFrames);
             }
             catch (Exception ex)
             {
@@ -194,7 +195,7 @@ public class PersonTrackingController : ControllerBase
         return Ok(job);
     }
 
-    private async Task ProcessVideoInBackground(string jobId, string videoName, string tempFilePath)
+    private async Task ProcessVideoInBackground(string jobId, string videoName, string tempFilePath, int? maxFrames = null)
     {
         try
         {
@@ -222,7 +223,7 @@ public class PersonTrackingController : ControllerBase
             
             // Extract frames from video
             using var fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read);
-            var frames = await _videoProcessingService.ExtractFramesAsync(fileStream, videoName);
+            var frames = await _videoProcessingService.ExtractFramesAsync(fileStream, videoName, maxFrames);
 
             _videoUploadJobService.UpdateProgress(jobId, 50, "Uploading frames to storage");
 
