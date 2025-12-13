@@ -16,12 +16,35 @@ public class AccessoryDetectionServiceTests
 
     public AccessoryDetectionServiceTests()
     {
-        _configurationMock = new Mock<IConfiguration>();
-        _configurationMock.Setup(c => c["AccessoryDetection:ModelPath"]).Returns((string?)null);
-        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ConfidenceThreshold").Value).Returns("0.5");
-        
+        _configurationMock = CreateMockConfiguration();
         var logger = Mock.Of<ILogger<AccessoryDetectionService>>();
         _service = new AccessoryDetectionService(_configurationMock.Object, logger);
+    }
+
+    private static Mock<IConfiguration> CreateMockConfiguration()
+    {
+        var configMock = new Mock<IConfiguration>();
+        configMock.Setup(c => c["AccessoryDetection:ModelPath"]).Returns((string?)null);
+        
+        // Setup configuration sections for AccessoryDetection parameters
+        var configValues = new Dictionary<string, string>
+        {
+            ["AccessoryDetection:ConfidenceThreshold"] = "0.5",
+            ["AccessoryDetection:MinIouThreshold"] = "0.01",
+            ["AccessoryDetection:ExtendedBoxLeftRightFactor"] = "0.2",
+            ["AccessoryDetection:ExtendedBoxTopFactor"] = "0.1",
+            ["AccessoryDetection:ExtendedBoxWidthMultiplier"] = "1.4",
+            ["AccessoryDetection:ExtendedBoxHeightMultiplier"] = "1.2"
+        };
+
+        foreach (var (key, value) in configValues)
+        {
+            var section = new Mock<IConfigurationSection>();
+            section.Setup(s => s.Value).Returns(value);
+            configMock.Setup(c => c.GetSection(key)).Returns(section.Object);
+        }
+        
+        return configMock;
     }
 
     [Fact]

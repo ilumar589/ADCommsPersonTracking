@@ -136,15 +136,313 @@ else
                     </MudItem>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.body2" Color="Color.Success"><strong>Persons Matching</strong></MudText>
-                        <MudText Typo="Typo.h5">@_diagnostics.Summary.PersonsMatchingCriteria</MudText>
+                        <MudText Typo="Typo.h5">
+                            @_diagnostics.Summary.PersonsMatchingCriteria
+                            @if (_diagnostics.Summary.TotalPersonsDetected > 0)
+                            {
+                                <span style="font-size: 0.6em; color: gray;">
+                                    (@((_diagnostics.Summary.PersonsMatchingCriteria * 100.0 / _diagnostics.Summary.TotalPersonsDetected).ToString("F1"))%)
+                                </span>
+                            }
+                        </MudText>
                     </MudItem>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.body2" Color="Color.Warning"><strong>Accessories Detected</strong></MudText>
                         <MudText Typo="Typo.h5">@_diagnostics.Summary.TotalAccessoriesDetected</MudText>
                     </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary"><strong>Total Association Attempts</strong></MudText>
+                        <MudText Typo="Typo.h6">@GetTotalAssociationAttempts()</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary"><strong>Successful Associations</strong></MudText>
+                        <MudText Typo="Typo.h6">@GetSuccessfulAssociations()</MudText>
+                    </MudItem>
+                    @if (GetTotalAssociationAttempts() > 0)
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Tertiary"><strong>Average IoU Score</strong></MudText>
+                            <MudText Typo="Typo.h6">@GetAverageIoU().ToString("F4")</MudText>
+                        </MudItem>
+                    }
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Color="Color.Dark"><strong>Processing Duration</strong></MudText>
+                        <MudText Typo="Typo.h6">@_diagnostics.Summary.ProcessingDuration.TotalMilliseconds.ToString("F0") ms</MudText>
+                    </MudItem>
                 </MudGrid>
             </MudPaper>
         </MudItem>
+
+        <!-- Per-Image Breakdown -->
+        @if (_diagnostics.ImageResults.Any())
+        {
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Class="mr-2"/>
+                        Per-Image Analysis
+                    </MudText>
+                    <MudExpansionPanels MultiExpansion="true">
+                        @foreach (var imageResult in _diagnostics.ImageResults.OrderBy(i => i.ImageIndex))
+                        {
+                            <MudExpansionPanel>
+                                <TitleContent>
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Photo" Class="mr-3" />
+                                        <MudText Typo="Typo.h6">Image @(imageResult.ImageIndex + 1)</MudText>
+                                        <MudSpacer />
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-2">
+                                            @imageResult.AllYoloDetections.Count detections
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                            @imageResult.PersonAnalysis.Count persons
+                                        </MudChip>
+                                    </div>
+                                </TitleContent>
+                                <ChildContent>
+                                    <MudText Typo="Typo.body2" Class="mb-2">
+                                        <strong>Image Dimensions:</strong> @imageResult.ImageWidth x @imageResult.ImageHeight px
+                                    </MudText>
+                                    
+                                    <!-- YOLO Detections Table -->
+                                    @if (imageResult.AllYoloDetections.Any())
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2"><strong>All YOLO Detections:</strong></MudText>
+                                        <MudTable Items="@imageResult.AllYoloDetections" Dense="true" Hover="true" Bordered="true" Striped="true">
+                                            <HeaderContent>
+                                                <MudTh>Class</MudTh>
+                                                <MudTh>Type</MudTh>
+                                                <MudTh>Confidence</MudTh>
+                                                <MudTh>Bounding Box (X, Y, W, H)</MudTh>
+                                            </HeaderContent>
+                                            <RowTemplate>
+                                                <MudTd DataLabel="Class">
+                                                    <MudChip T="string" Size="Size.Small" Color="@(context.ClassId == 0 ? Color.Primary : Color.Warning)">
+                                                        @context.ClassId
+                                                    </MudChip>
+                                                </MudTd>
+                                                <MudTd DataLabel="Type">@context.ClassName</MudTd>
+                                                <MudTd DataLabel="Confidence">@context.Confidence.ToString("F3")</MudTd>
+                                                <MudTd DataLabel="BoundingBox">
+                                                    (@context.BoundingBox.X.ToString("F1"), @context.BoundingBox.Y.ToString("F1"), 
+                                                    @context.BoundingBox.Width.ToString("F1"), @context.BoundingBox.Height.ToString("F1"))
+                                                </MudTd>
+                                            </RowTemplate>
+                                        </MudTable>
+                                    }
+                                    
+                                    <!-- Per-Person Analysis -->
+                                    @if (imageResult.PersonAnalysis.Any())
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><strong>Person Analysis:</strong></MudText>
+                                        @foreach (var person in imageResult.PersonAnalysis.OrderBy(p => p.PersonIndex))
+                                        {
+                                            <MudCard Class="mb-3" Elevation="1">
+                                                <MudCardHeader>
+                                                    <CardHeaderContent>
+                                                        <div class="d-flex align-center">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+                                                            <MudText Typo="Typo.h6">Person @(person.PersonIndex + 1)</MudText>
+                                                            <MudSpacer />
+                                                            @if (person.WasIncludedInResults)
+                                                            {
+                                                                <MudChip T="string" Color="Color.Success" Size="Size.Small">✓ Included</MudChip>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudChip T="string" Color="Color.Error" Size="Size.Small">✗ Excluded</MudChip>
+                                                            }
+                                                        </div>
+                                                    </CardHeaderContent>
+                                                </MudCardHeader>
+                                                <MudCardContent>
+                                                    <!-- Person Info -->
+                                                    <MudText Typo="Typo.body2" Class="mb-2">
+                                                        <strong>Bounding Box:</strong> 
+                                                        (@person.PersonBox.X.ToString("F1"), @person.PersonBox.Y.ToString("F1"), 
+                                                        @person.PersonBox.Width.ToString("F1"), @person.PersonBox.Height.ToString("F1"))
+                                                        | <strong>Confidence:</strong> @person.PersonBox.Confidence.ToString("F3")
+                                                    </MudText>
+                                                    
+                                                    <!-- Detected Colors -->
+                                                    @if (person.ColorAnalysis.UpperBodyColors.Any() || person.ColorAnalysis.LowerBodyColors.Any() || person.ColorAnalysis.OverallColors.Any())
+                                                    {
+                                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1"><strong>Detected Colors:</strong></MudText>
+                                                        <div class="d-flex flex-wrap gap-2 mb-2">
+                                                            @if (person.ColorAnalysis.UpperBodyColors.Any())
+                                                            {
+                                                                <MudText Typo="Typo.body2" Class="mr-3">
+                                                                    <strong>Upper:</strong> @string.Join(", ", person.ColorAnalysis.UpperBodyColors)
+                                                                </MudText>
+                                                            }
+                                                            @if (person.ColorAnalysis.LowerBodyColors.Any())
+                                                            {
+                                                                <MudText Typo="Typo.body2" Class="mr-3">
+                                                                    <strong>Lower:</strong> @string.Join(", ", person.ColorAnalysis.LowerBodyColors)
+                                                                </MudText>
+                                                            }
+                                                            @if (person.ColorAnalysis.OverallColors.Any())
+                                                            {
+                                                                <MudText Typo="Typo.body2">
+                                                                    <strong>Overall:</strong> @string.Join(", ", person.ColorAnalysis.OverallColors)
+                                                                </MudText>
+                                                            }
+                                                        </div>
+                                                    }
+                                                    
+                                                    <!-- Accessory Association Attempts -->
+                                                    @if (person.AccessoryMatching.AssociationAttempts.Any())
+                                                    {
+                                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1"><strong>Accessory Association Attempts:</strong></MudText>
+                                                        <MudTable Items="@person.AccessoryMatching.AssociationAttempts" Dense="true" Hover="true" Bordered="true" Striped="true" Class="mb-2">
+                                                            <HeaderContent>
+                                                                <MudTh>Type</MudTh>
+                                                                <MudTh>Conf</MudTh>
+                                                                <MudTh>Box (X, Y, W, H)</MudTh>
+                                                                <MudTh>IoU</MudTh>
+                                                                <MudTh>Extended Bounds</MudTh>
+                                                                <MudTh>Result</MudTh>
+                                                            </HeaderContent>
+                                                            <RowTemplate>
+                                                                <MudTd DataLabel="Type">@context.AccessoryType</MudTd>
+                                                                <MudTd DataLabel="Confidence">@context.AccessoryConfidence.ToString("F3")</MudTd>
+                                                                <MudTd DataLabel="Box">
+                                                                    (@context.AccessoryBox.X.ToString("F0"), @context.AccessoryBox.Y.ToString("F0"), 
+                                                                    @context.AccessoryBox.Width.ToString("F0"), @context.AccessoryBox.Height.ToString("F0"))
+                                                                </MudTd>
+                                                                <MudTd DataLabel="IoU">
+                                                                    <span style="@(context.IoUScore < 0.01 ? "color: red; font-weight: bold;" : "color: green;")">
+                                                                        @context.IoUScore.ToString("F4")
+                                                                    </span>
+                                                                </MudTd>
+                                                                <MudTd DataLabel="ExtendedBounds">
+                                                                    @if (context.WithinExtendedBounds)
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                                                                    }
+                                                                </MudTd>
+                                                                <MudTd DataLabel="Result">
+                                                                    @if (context.WasAssociated)
+                                                                    {
+                                                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">✓ Associated</MudChip>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">✗ Not Associated</MudChip>
+                                                                    }
+                                                                </MudTd>
+                                                            </RowTemplate>
+                                                        </MudTable>
+                                                        
+                                                        <!-- Show detailed reasons -->
+                                                        @foreach (var attempt in person.AccessoryMatching.AssociationAttempts)
+                                                        {
+                                                            <MudAlert Severity="@(attempt.WasAssociated ? Severity.Success : Severity.Warning)" 
+                                                                      Dense="true" Class="mb-1" Style="font-size: 0.85rem;">
+                                                                <strong>@attempt.AccessoryType:</strong> @attempt.AssociationReason
+                                                            </MudAlert>
+                                                        }
+                                                    }
+                                                    
+                                                    <!-- Associated Items -->
+                                                    @if (person.AccessoryMatching.AssociatedAccessories.Any() || person.AccessoryMatching.AssociatedClothing.Any())
+                                                    {
+                                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1"><strong>Successfully Associated:</strong></MudText>
+                                                        <div class="d-flex flex-wrap gap-2 mb-2">
+                                                            @foreach (var accessory in person.AccessoryMatching.AssociatedAccessories)
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Color="Color.Success">@accessory</MudChip>
+                                                            }
+                                                            @foreach (var clothing in person.AccessoryMatching.AssociatedClothing)
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@clothing</MudChip>
+                                                            }
+                                                        </div>
+                                                    }
+                                                    
+                                                    <!-- Criteria Matching -->
+                                                    <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1"><strong>Criteria Matching Summary:</strong></MudText>
+                                                    <MudPaper Elevation="0" Class="pa-2" Style="background-color: #f5f5f5;">
+                                                        <MudGrid>
+                                                            <MudItem xs="12">
+                                                                <div class="d-flex align-center mb-1">
+                                                                    @if (person.CriteriaMatching.MatchesColors)
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    <MudText Typo="Typo.body2" Style="font-size: 0.9rem;">@person.CriteriaMatching.ColorMatchDetails</MudText>
+                                                                </div>
+                                                            </MudItem>
+                                                            <MudItem xs="12">
+                                                                <div class="d-flex align-center mb-1">
+                                                                    @if (person.CriteriaMatching.MatchesAccessories)
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    <MudText Typo="Typo.body2" Style="font-size: 0.9rem;">@person.CriteriaMatching.AccessoryMatchDetails</MudText>
+                                                                </div>
+                                                            </MudItem>
+                                                            <MudItem xs="12">
+                                                                <div class="d-flex align-center mb-1">
+                                                                    @if (person.CriteriaMatching.MatchesPhysical)
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" Class="mr-1" />
+                                                                    }
+                                                                    <MudText Typo="Typo.body2" Style="font-size: 0.9rem;">@person.CriteriaMatching.PhysicalMatchDetails</MudText>
+                                                                </div>
+                                                            </MudItem>
+                                                            <MudItem xs="12">
+                                                                <MudDivider Class="my-2" />
+                                                                <div class="d-flex align-center">
+                                                                    @if (person.CriteriaMatching.OverallMatch)
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                                                                        <MudText Typo="Typo.body1" Color="Color.Success"><strong>Overall: MATCH</strong></MudText>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Class="mr-2" />
+                                                                        <MudText Typo="Typo.body1" Color="Color.Error"><strong>Overall: NO MATCH</strong></MudText>
+                                                                    }
+                                                                </div>
+                                                            </MudItem>
+                                                        </MudGrid>
+                                                    </MudPaper>
+                                                    
+                                                    <!-- Exclusion Reason -->
+                                                    @if (!person.WasIncludedInResults && !string.IsNullOrEmpty(person.ExclusionReason))
+                                                    {
+                                                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                                                            <strong>Exclusion Reason:</strong> @person.ExclusionReason
+                                                        </MudAlert>
+                                                    }
+                                                </MudCardContent>
+                                            </MudCard>
+                                        }
+                                    }
+                                </ChildContent>
+                            </MudExpansionPanel>
+                        }
+                    </MudExpansionPanels>
+                </MudPaper>
+            </MudItem>
+        }
 
         <!-- Log Timeline -->
         <MudItem xs="12">
@@ -242,5 +540,39 @@ else
             "error" => Color.Error,
             _ => Color.Default
         };
+    }
+
+    private int GetTotalAssociationAttempts()
+    {
+        if (_diagnostics == null) return 0;
+        
+        return _diagnostics.ImageResults
+            .SelectMany(img => img.PersonAnalysis)
+            .SelectMany(person => person.AccessoryMatching.AssociationAttempts)
+            .Count();
+    }
+
+    private int GetSuccessfulAssociations()
+    {
+        if (_diagnostics == null) return 0;
+        
+        return _diagnostics.ImageResults
+            .SelectMany(img => img.PersonAnalysis)
+            .SelectMany(person => person.AccessoryMatching.AssociationAttempts)
+            .Count(attempt => attempt.WasAssociated);
+    }
+
+    private float GetAverageIoU()
+    {
+        if (_diagnostics == null) return 0f;
+        
+        var attempts = _diagnostics.ImageResults
+            .SelectMany(img => img.PersonAnalysis)
+            .SelectMany(person => person.AccessoryMatching.AssociationAttempts)
+            .ToList();
+        
+        if (attempts.Count == 0) return 0f;
+        
+        return attempts.Average(attempt => attempt.IoUScore);
     }
 }
