@@ -135,7 +135,7 @@ The integration tests directly use the C# `ObjectDetectionService` with the actu
 
 ### Key Files
 - `ADCommsPersonTracking.Tests/Integration/YoloIntegrationTests.cs` - Integration test suite
-- `models/yolo11m.onnx` - YOLO11 model (downloaded via script, not committed)
+- `models/yolo11x.onnx` - YOLO11 model (downloaded via script, not committed)
 - `ADCommsPersonTracking.Tests/TestData/Images/` - Test images
 
 ## CI/CD Considerations
@@ -174,7 +174,7 @@ jobs:
 
 ### Model Not Found
 ```
-InvalidOperationException: YOLO11 model not found at models/yolo11m.onnx
+InvalidOperationException: YOLO11 model not found at models/yolo11x.onnx
 ```
 **Solution**: Run `python download-model.py` to download the model before running integration tests.
 

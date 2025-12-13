@@ -227,12 +227,12 @@ Key extension methods:
 
 ### Different YOLO Model
 
-To use a different YOLO11 model size, update the model export script to export a different model variant (yolo11s, yolo11m, yolo11l, or yolo11x), then update the `ModelPath` configuration in `appsettings.json`:
+The default model is YOLO11x (extra-large) for best accuracy. To use a different YOLO11 model size, update the model export script to export a different model variant (yolo11n, yolo11s, yolo11m, or yolo11l), then update the `ModelPath` configuration in `appsettings.json`:
 
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11s.onnx"
+    "ModelPath": "models/yolo11s.onnx"  // Example: using smaller model for faster inference
   }
 }
 ```
