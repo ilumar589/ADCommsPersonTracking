@@ -35,12 +35,10 @@ public class PersonTrackingApiServiceTests
         var videoData = Encoding.UTF8.GetBytes("fake video content");
         var videoStream = new MemoryStream(videoData);
         
-        var expectedResponse = new VideoUploadResponse
+        var expectedResponse = new VideoUploadJobResponse
         {
-            TrackingId = "test-tracking-id",
-            FrameCount = 100,
-            WasCached = false,
-            Message = "Upload successful"
+            JobId = "test-job-id",
+            Message = "Upload started"
         };
 
         _httpMessageHandlerMock
@@ -63,8 +61,8 @@ public class PersonTrackingApiServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.TrackingId.Should().Be("test-tracking-id");
-        result.FrameCount.Should().Be(100);
+        result!.JobId.Should().Be("test-job-id");
+        result.Message.Should().Be("Upload started");
     }
 
     [Fact]
@@ -74,12 +72,10 @@ public class PersonTrackingApiServiceTests
         var fileName = "test.mp4";
         var videoData = Encoding.UTF8.GetBytes("fake video content");
         
-        var expectedResponse = new VideoUploadResponse
+        var expectedResponse = new VideoUploadJobResponse
         {
-            TrackingId = "test-tracking-id",
-            FrameCount = 100,
-            WasCached = false,
-            Message = "Upload successful"
+            JobId = "test-job-id",
+            Message = "Upload started"
         };
 
         _httpMessageHandlerMock
@@ -107,8 +103,8 @@ public class PersonTrackingApiServiceTests
         // Assert
         // The method should still succeed because it resets the position to 0
         result.Should().NotBeNull();
-        result!.TrackingId.Should().Be("test-tracking-id");
-        result.FrameCount.Should().Be(100);
+        result!.JobId.Should().Be("test-job-id");
+        result.Message.Should().Be("Upload started");
     }
 
     [Fact]
@@ -119,12 +115,10 @@ public class PersonTrackingApiServiceTests
         var videoData = Encoding.UTF8.GetBytes("fake video content");
         var nonSeekableStream = new NonSeekableMemoryStream(videoData);
         
-        var expectedResponse = new VideoUploadResponse
+        var expectedResponse = new VideoUploadJobResponse
         {
-            TrackingId = "test-tracking-id",
-            FrameCount = 100,
-            WasCached = false,
-            Message = "Upload successful"
+            JobId = "test-job-id",
+            Message = "Upload started"
         };
 
         _httpMessageHandlerMock
@@ -147,8 +141,8 @@ public class PersonTrackingApiServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.TrackingId.Should().Be("test-tracking-id");
-        result.FrameCount.Should().Be(100);
+        result!.JobId.Should().Be("test-job-id");
+        result.Message.Should().Be("Upload started");
     }
 
     [Fact]

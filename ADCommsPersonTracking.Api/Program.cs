@@ -35,6 +35,7 @@ builder.AddRedisDistributedCache("redis");
 builder.Services.AddSingleton<IVideoProcessingService, VideoProcessingService>();
 builder.Services.AddSingleton<IFrameStorageService, FrameStorageService>();
 builder.Services.AddSingleton<IVideoCacheService, VideoCacheService>();
+builder.Services.AddSingleton<IVideoUploadJobService, VideoUploadJobService>();
 
 // Add CORS for web clients
 builder.Services.AddCors(options =>

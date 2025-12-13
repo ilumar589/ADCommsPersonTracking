@@ -17,6 +17,7 @@ public class PersonTrackingControllerTests
     private readonly Mock<IVideoProcessingService> _videoProcessingServiceMock;
     private readonly Mock<IFrameStorageService> _frameStorageServiceMock;
     private readonly Mock<IVideoCacheService> _videoCacheServiceMock;
+    private readonly Mock<IVideoUploadJobService> _videoUploadJobServiceMock;
     private readonly PersonTrackingController _controller;
 
     public PersonTrackingControllerTests()
@@ -25,13 +26,28 @@ public class PersonTrackingControllerTests
         _videoProcessingServiceMock = new Mock<IVideoProcessingService>();
         _frameStorageServiceMock = new Mock<IFrameStorageService>();
         _videoCacheServiceMock = new Mock<IVideoCacheService>();
+        _videoUploadJobServiceMock = new Mock<IVideoUploadJobService>();
+        
+        // Setup default behavior for video upload job service
+        _videoUploadJobServiceMock
+            .Setup(s => s.CreateJob())
+            .Returns(new VideoUploadJob
+            {
+                JobId = "test-job-id",
+                Status = "Pending",
+                ProgressPercentage = 0,
+                CurrentStep = "Initializing",
+                CreatedAt = DateTime.UtcNow
+            });
+        
         var logger = Mock.Of<ILogger<PersonTrackingController>>();
         _controller = new PersonTrackingController(
             _trackingServiceMock.Object, 
             logger,
             _videoProcessingServiceMock.Object,
             _frameStorageServiceMock.Object,
-            _videoCacheServiceMock.Object);
+            _videoCacheServiceMock.Object,
+            _videoUploadJobServiceMock.Object);
     }
 
     [Fact]
@@ -274,104 +290,34 @@ public class PersonTrackingControllerTests
     }
 
     [Fact]
-    public async Task UploadVideo_WithSameFilename_GeneratesSameTrackingId()
+    public async Task UploadVideo_WithValidVideo_ReturnsJobIdImmediately()
     {
         // Arrange
         var videoName = "test_video.mp4";
-        var frames = new List<byte[]> { CreateTestImage(640, 480) };
 
-        _videoCacheServiceMock
-            .Setup(s => s.GetTrackingIdByVideoNameAsync(videoName))
-            .ReturnsAsync((string?)null);
+        var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
 
-        _videoProcessingServiceMock
-            .Setup(s => s.ExtractFramesAsync(It.IsAny<Stream>(), videoName))
-            .ReturnsAsync(frames);
+        // Act
+        var result = await _controller.UploadVideo(video);
 
-        _frameStorageServiceMock
-            .Setup(s => s.UploadFramesAsync(It.IsAny<string>(), frames))
-            .ReturnsAsync("container-url");
+        // Assert - Should return job response immediately
+        result.Result.Should().BeOfType<OkObjectResult>();
 
-        _videoCacheServiceMock
-            .Setup(s => s.SetTrackingIdForVideoAsync(videoName, It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+        var response = (result.Result as OkObjectResult)!.Value as VideoUploadJobResponse;
 
-        var video1 = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
-        var video2 = CreateMockFormFile(videoName, "video/mp4", new byte[] { 4, 5, 6 });
-
-        // Act - Upload same filename twice
-        var result1 = await _controller.UploadVideo(video1);
-        var result2 = await _controller.UploadVideo(video2);
-
-        // Assert - Both should generate the same tracking ID
-        result1.Result.Should().BeOfType<OkObjectResult>();
-        result2.Result.Should().BeOfType<OkObjectResult>();
-
-        var response1 = (result1.Result as OkObjectResult)!.Value as VideoUploadResponse;
-        var response2 = (result2.Result as OkObjectResult)!.Value as VideoUploadResponse;
-
-        response1.Should().NotBeNull();
-        response2.Should().NotBeNull();
-        response1!.TrackingId.Should().Be(response2!.TrackingId);
-        response1.TrackingId.Should().StartWith("video_");
+        response.Should().NotBeNull();
+        response!.JobId.Should().Be("test-job-id");
+        response.Message.Should().Contain("job ID");
+        
+        // Verify that CreateJob was called
+        _videoUploadJobServiceMock.Verify(s => s.CreateJob(), Times.Once);
     }
 
     [Fact]
-    public async Task UploadVideo_WithDifferentFilenames_GeneratesDifferentTrackingIds()
+    public async Task UploadVideo_UpdatesJobProgress()
     {
         // Arrange
-        var videoName1 = "test_video1.mp4";
-        var videoName2 = "test_video2.mp4";
-        var frames = new List<byte[]> { CreateTestImage(640, 480) };
-
-        _videoCacheServiceMock
-            .Setup(s => s.GetTrackingIdByVideoNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((string?)null);
-
-        _videoProcessingServiceMock
-            .Setup(s => s.ExtractFramesAsync(It.IsAny<Stream>(), It.IsAny<string>()))
-            .ReturnsAsync(frames);
-
-        _frameStorageServiceMock
-            .Setup(s => s.UploadFramesAsync(It.IsAny<string>(), frames))
-            .ReturnsAsync("container-url");
-
-        _videoCacheServiceMock
-            .Setup(s => s.SetTrackingIdForVideoAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
-
-        var video1 = CreateMockFormFile(videoName1, "video/mp4", new byte[] { 1, 2, 3 });
-        var video2 = CreateMockFormFile(videoName2, "video/mp4", new byte[] { 4, 5, 6 });
-
-        // Act - Upload different filenames
-        var result1 = await _controller.UploadVideo(video1);
-        var result2 = await _controller.UploadVideo(video2);
-
-        // Assert - Should generate different tracking IDs
-        result1.Result.Should().BeOfType<OkObjectResult>();
-        result2.Result.Should().BeOfType<OkObjectResult>();
-
-        var response1 = (result1.Result as OkObjectResult)!.Value as VideoUploadResponse;
-        var response2 = (result2.Result as OkObjectResult)!.Value as VideoUploadResponse;
-
-        response1.Should().NotBeNull();
-        response2.Should().NotBeNull();
-        response1!.TrackingId.Should().NotBe(response2!.TrackingId);
-        response1.TrackingId.Should().StartWith("video_");
-        response2.TrackingId.Should().StartWith("video_");
-    }
-
-    [Fact]
-    public async Task UploadVideo_WithCachedVideo_ReturnsCachedTrackingId()
-    {
-        // Arrange
-        var videoName = "cached_video.mp4";
-        var cachedTrackingId = "video_cached123";
-
-        _videoCacheServiceMock
-            .Setup(s => s.GetTrackingIdByVideoNameAsync(videoName))
-            .ReturnsAsync(cachedTrackingId);
-
+        var videoName = "test_video.mp4";
         var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
 
         // Act
@@ -379,17 +325,33 @@ public class PersonTrackingControllerTests
 
         // Assert
         result.Result.Should().BeOfType<OkObjectResult>();
-        var response = (result.Result as OkObjectResult)!.Value as VideoUploadResponse;
+        
+        // Verify that progress updates were called
+        _videoUploadJobServiceMock.Verify(
+            s => s.UpdateProgress(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()), 
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task UploadVideo_StartsBackgroundProcessing()
+    {
+        // Arrange
+        var videoName = "test_video.mp4";
+        var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
+
+        // Act
+        var result = await _controller.UploadVideo(video);
+
+        // Assert - Should return job response immediately without waiting for processing
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var response = (result.Result as OkObjectResult)!.Value as VideoUploadJobResponse;
         
         response.Should().NotBeNull();
-        response!.TrackingId.Should().Be(cachedTrackingId);
-        response.WasCached.Should().BeTrue();
-        response.Message.Should().Contain("already processed");
-
-        // Verify that video processing was not called
-        _videoProcessingServiceMock.Verify(
-            s => s.ExtractFramesAsync(It.IsAny<Stream>(), It.IsAny<string>()), 
-            Times.Never);
+        response!.JobId.Should().NotBeNullOrEmpty();
+        response.Message.Should().Contain("job ID");
+        
+        // Verify that CreateJob was called to start the background processing
+        _videoUploadJobServiceMock.Verify(s => s.CreateJob(), Times.Once);
     }
 
     private IFormFile CreateMockFormFile(string fileName, string contentType, byte[] content)

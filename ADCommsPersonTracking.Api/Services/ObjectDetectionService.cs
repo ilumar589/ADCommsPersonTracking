@@ -16,6 +16,7 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     private const int InputWidth = 640;
     private const int InputHeight = 640;
     private const float ConfidenceThreshold = 0.45f;
+    private readonly float _accessoryConfidenceThreshold;
     private const float IouThreshold = 0.5f;
     private const int MaxDetections = 8400; // YOLO11 output detections
     private const int NumCocoClasses = 80; // Number of classes in COCO dataset
@@ -35,6 +36,9 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
     {
         _logger = logger;
         _modelPath = configuration["ObjectDetection:ModelPath"] ?? "models/yolo11n.onnx";
+        
+        // Read accessory confidence threshold from configuration, default to 0.25
+        _accessoryConfidenceThreshold = configuration.GetValue<float>("ObjectDetection:AccessoryConfidenceThreshold", 0.25f);
         
         // Initialize model if it exists
         if (File.Exists(_modelPath))
@@ -245,7 +249,8 @@ public class ObjectDetectionService : IObjectDetectionService, IDisposable
             }
 
             // Check if it's a person (class 0) or an accessory class and meets confidence threshold
-            if ((maxClass == 0 || AccessoryClassIds.Contains(maxClass)) && maxScore >= ConfidenceThreshold)
+            var threshold = maxClass == 0 ? ConfidenceThreshold : _accessoryConfidenceThreshold;
+            if ((maxClass == 0 || AccessoryClassIds.Contains(maxClass)) && maxScore >= threshold)
             {
                 var cx = output[0, 0, i];
                 var cy = output[0, 1, i];
