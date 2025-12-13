@@ -18,7 +18,31 @@ public class AccessoryDetectionServiceTests
     {
         _configurationMock = new Mock<IConfiguration>();
         _configurationMock.Setup(c => c["AccessoryDetection:ModelPath"]).Returns((string?)null);
-        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ConfidenceThreshold").Value).Returns("0.5");
+        
+        // Setup GetValue for all configuration values
+        var confidenceSection = new Mock<IConfigurationSection>();
+        confidenceSection.Setup(s => s.Value).Returns("0.5");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ConfidenceThreshold")).Returns(confidenceSection.Object);
+        
+        var minIouSection = new Mock<IConfigurationSection>();
+        minIouSection.Setup(s => s.Value).Returns("0.01");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:MinIouThreshold")).Returns(minIouSection.Object);
+        
+        var leftRightSection = new Mock<IConfigurationSection>();
+        leftRightSection.Setup(s => s.Value).Returns("0.2");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ExtendedBoxLeftRightFactor")).Returns(leftRightSection.Object);
+        
+        var topSection = new Mock<IConfigurationSection>();
+        topSection.Setup(s => s.Value).Returns("0.1");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ExtendedBoxTopFactor")).Returns(topSection.Object);
+        
+        var widthSection = new Mock<IConfigurationSection>();
+        widthSection.Setup(s => s.Value).Returns("1.4");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ExtendedBoxWidthMultiplier")).Returns(widthSection.Object);
+        
+        var heightSection = new Mock<IConfigurationSection>();
+        heightSection.Setup(s => s.Value).Returns("1.2");
+        _configurationMock.Setup(c => c.GetSection("AccessoryDetection:ExtendedBoxHeightMultiplier")).Returns(heightSection.Object);
         
         var logger = Mock.Of<ILogger<AccessoryDetectionService>>();
         _service = new AccessoryDetectionService(_configurationMock.Object, logger);
