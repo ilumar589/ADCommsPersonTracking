@@ -18,6 +18,7 @@ public class PersonTrackingController : ControllerBase
     private readonly IFrameStorageService _frameStorageService;
     private readonly IVideoCacheService _videoCacheService;
     private readonly IVideoUploadJobService _videoUploadJobService;
+    private readonly ITrackByIdJobService _trackByIdJobService;
 
     public PersonTrackingController(
         IPersonTrackingService trackingService,
@@ -25,7 +26,8 @@ public class PersonTrackingController : ControllerBase
         IVideoProcessingService videoProcessingService,
         IFrameStorageService frameStorageService,
         IVideoCacheService videoCacheService,
-        IVideoUploadJobService videoUploadJobService)
+        IVideoUploadJobService videoUploadJobService,
+        ITrackByIdJobService trackByIdJobService)
     {
         _trackingService = trackingService;
         _logger = logger;
@@ -33,6 +35,7 @@ public class PersonTrackingController : ControllerBase
         _frameStorageService = frameStorageService;
         _videoCacheService = videoCacheService;
         _videoUploadJobService = videoUploadJobService;
+        _trackByIdJobService = trackByIdJobService;
     }
 
     /// <summary>
@@ -275,12 +278,12 @@ public class PersonTrackingController : ControllerBase
     /// Track persons using a previously uploaded video's tracking ID
     /// </summary>
     /// <param name="request">Track by ID request with tracking ID and prompt</param>
-    /// <returns>Tracking response with bounding boxes for matched persons</returns>
+    /// <returns>Job response with job ID for tracking progress</returns>
     [HttpPost("track-by-id")]
-    [ProducesResponseType(typeof(TrackingResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TrackByIdJobResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TrackingResponse>> TrackById([FromBody] TrackByIdRequest request)
+    public async Task<ActionResult<TrackByIdJobResponse>> TrackById([FromBody] TrackByIdRequest request)
     {
         if (string.IsNullOrEmpty(request.TrackingId))
         {
@@ -301,7 +304,7 @@ public class PersonTrackingController : ControllerBase
                 return NotFound($"No frames found for tracking ID: {request.TrackingId}");
             }
 
-            // Retrieve frames from storage
+            // Retrieve frames from storage to get count
             var frames = await _frameStorageService.GetFramesAsync(request.TrackingId);
             
             if (frames.Count == 0)
@@ -312,28 +315,57 @@ public class PersonTrackingController : ControllerBase
             _logger.LogInformation("Retrieved {FrameCount} frames for tracking ID {TrackingId}", 
                 frames.Count, request.TrackingId);
 
-            // Convert frames to base64
-            var imagesBase64 = frames.Select(f => Convert.ToBase64String(f)).ToList();
+            // Create a job entry
+            var job = _trackByIdJobService.CreateJob(frames.Count);
+            _trackByIdJobService.UpdateProgress(job.JobId, 0, "Starting frame processing");
 
-            // Create tracking request
-            var trackingRequest = new TrackingRequest
+            // Start background processing
+            _ = Task.Run(async () =>
             {
-                ImagesBase64 = imagesBase64,
-                Prompt = request.Prompt,
-                Timestamp = request.Timestamp
-            };
+                try
+                {
+                    await ProcessTrackByIdInBackground(job.JobId, request, frames);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unhandled exception in background track-by-id processing for job {JobId}", job.JobId);
+                    _trackByIdJobService.FailJob(job.JobId, $"Unexpected error: {ex.Message}");
+                }
+            });
 
-            // Process frames using existing tracking service
-            var response = await _trackingService.ProcessFrameAsync(trackingRequest);
-            
-            return Ok(response);
+            return Ok(new TrackByIdJobResponse
+            {
+                JobId = job.JobId,
+                Message = "Track-by-id processing started. Use the job ID to check progress.",
+                TotalFrames = frames.Count
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing track-by-id request for tracking ID: {TrackingId}", 
+            _logger.LogError(ex, "Error starting track-by-id request for tracking ID: {TrackingId}", 
                 request.TrackingId);
             return StatusCode(500, "Internal server error");
         }
+    }
+
+    /// <summary>
+    /// Get the status of a track-by-id job
+    /// </summary>
+    /// <param name="jobId">The job ID</param>
+    /// <returns>Track-by-id job status</returns>
+    [HttpGet("track-by-id/status/{jobId}")]
+    [ProducesResponseType(typeof(TrackByIdJob), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<TrackByIdJob> GetTrackByIdStatus(string jobId)
+    {
+        var job = _trackByIdJobService.GetJob(jobId);
+        
+        if (job == null)
+        {
+            return NotFound($"Job with ID '{jobId}' not found");
+        }
+
+        return Ok(job);
     }
 
     /// <summary>
@@ -364,6 +396,52 @@ public class PersonTrackingController : ControllerBase
     public IActionResult HealthCheck()
     {
         return Ok(new { status = "healthy", timestamp = DateTime.UtcNow });
+    }
+
+    private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames)
+    {
+        const int ConversionProgressWeight = 20; // 20% for conversion
+        const int ProcessingProgressWeight = 60; // 60% for actual processing
+        const int FinalizingProgressWeight = 20; // 20% for finalizing
+        
+        try
+        {
+            var totalFrames = frames.Count;
+            
+            _trackByIdJobService.UpdateProgress(jobId, 0, "Converting frames to base64");
+            
+            // Convert frames to base64
+            var imagesBase64 = frames.Select(f => Convert.ToBase64String(f)).ToList();
+
+            var framesAfterConversion = (int)(totalFrames * (ConversionProgressWeight / 100.0));
+            _trackByIdJobService.UpdateProgress(jobId, framesAfterConversion, "Processing frames with tracking service");
+
+            // Create tracking request
+            var trackingRequest = new TrackingRequest
+            {
+                ImagesBase64 = imagesBase64,
+                Prompt = request.Prompt,
+                Timestamp = request.Timestamp
+            };
+
+            var framesAfterProcessing = framesAfterConversion + (int)(totalFrames * (ProcessingProgressWeight / 100.0));
+            _trackByIdJobService.UpdateProgress(jobId, framesAfterProcessing, "Analyzing detections");
+
+            // Process frames using existing tracking service
+            var response = await _trackingService.ProcessFrameAsync(trackingRequest);
+            
+            _trackByIdJobService.UpdateProgress(jobId, totalFrames, "Finalizing results");
+
+            _logger.LogInformation("Successfully processed track-by-id job {JobId} for tracking ID {TrackingId}", 
+                jobId, request.TrackingId);
+
+            _trackByIdJobService.CompleteJob(jobId, response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing track-by-id job {JobId}", jobId);
+            _trackByIdJobService.FailJob(jobId, ex.Message);
+        }
     }
 
     /// <summary>
