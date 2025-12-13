@@ -45,6 +45,9 @@ public class PersonTrackingService : IPersonTrackingService
 
     public async Task<TrackingResponse> ProcessFrameAsync(TrackingRequest request)
     {
+        var diagnosticsSessionId = request.DiagnosticsSessionId;
+        var hasDiagnostics = !string.IsNullOrEmpty(diagnosticsSessionId) && _diagnosticsService.IsEnabled;
+        
         try
         {
             _logger.LogProcessFrameStart(request.ImagesBase64.Count, request.Prompt);
@@ -52,6 +55,12 @@ public class PersonTrackingService : IPersonTrackingService
 
             // Extract search features from the prompt using rule-based extraction
             var searchCriteria = _featureExtractor.ExtractFeatures(request.Prompt);
+            
+            // Record extracted criteria in diagnostics
+            if (hasDiagnostics)
+            {
+                _diagnosticsService.SetSearchCriteria(diagnosticsSessionId!, searchCriteria);
+            }
             var searchFeatures = new List<string>();
             searchFeatures.AddRange(searchCriteria.Colors);
             searchFeatures.AddRange(searchCriteria.ClothingItems);
@@ -346,6 +355,19 @@ public class PersonTrackingService : IPersonTrackingService
 
             _logger.LogMatchedDetections(totalMatchedDetections, totalDetections);
             _logger.LogProcessingComplete(totalDetections, totalMatchedDetections, string.Join("; ", criteriaDescription));
+            
+            // Record processing summary in diagnostics
+            if (hasDiagnostics)
+            {
+                var summary = new ProcessingSummary
+                {
+                    TotalImagesProcessed = request.ImagesBase64.Count,
+                    TotalPersonsDetected = totalDetections,
+                    PersonsMatchingCriteria = totalMatchedDetections,
+                    ProcessingDuration = TimeSpan.Zero // TODO: Add timing if needed
+                };
+                _diagnosticsService.SetProcessingSummary(diagnosticsSessionId!, summary);
+            }
             
             return response;
         }

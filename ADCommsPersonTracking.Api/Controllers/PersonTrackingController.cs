@@ -407,28 +407,85 @@ public class PersonTrackingController : ControllerBase
             return BadRequest("Diagnostics is not enabled on this server");
         }
 
+        if (string.IsNullOrEmpty(request.TrackingId))
+        {
+            return BadRequest("Tracking ID is required");
+        }
+
+        if (string.IsNullOrEmpty(request.Prompt))
+        {
+            return BadRequest("Search prompt is required");
+        }
+
         // Start a diagnostics session
         var diagnosticsSessionId = _diagnosticsService.StartSession(request.TrackingId, request.Prompt);
 
-        // Call the normal track-by-id endpoint
-        var result = await TrackById(request);
-
-        // End the diagnostics session
-        _diagnosticsService.EndSession(diagnosticsSessionId);
-
-        // If successful, include the diagnostics session ID in the response
-        if (result.Result is OkObjectResult okResult && okResult.Value is TrackByIdJobResponse jobResponse)
+        try
         {
+            // Check if frames exist for the tracking ID
+            var framesExist = await _frameStorageService.FramesExistAsync(request.TrackingId);
+            if (!framesExist)
+            {
+                _diagnosticsService.AddWarning(diagnosticsSessionId, "No frames found in blob storage for this tracking ID");
+                _diagnosticsService.RecordFrameRetrieval(diagnosticsSessionId, 0, false, "Frames do not exist in storage");
+                _diagnosticsService.EndSession(diagnosticsSessionId);
+                return NotFound($"No frames found for tracking ID: {request.TrackingId}");
+            }
+
+            // Retrieve frames from storage to get count
+            var frames = await _frameStorageService.GetFramesAsync(request.TrackingId);
+            
+            _logger.LogInformation("Retrieved {FrameCount} frames for tracking ID {TrackingId} with diagnostics session {DiagnosticsSessionId}", 
+                frames.Count, request.TrackingId, diagnosticsSessionId);
+            
+            // Record frame retrieval in diagnostics
+            _diagnosticsService.RecordFrameRetrieval(diagnosticsSessionId, frames.Count, true);
+            
+            if (frames.Count == 0)
+            {
+                _diagnosticsService.AddWarning(diagnosticsSessionId, "Frame list is empty after retrieval");
+                _diagnosticsService.EndSession(diagnosticsSessionId);
+                return NotFound($"No frames found for tracking ID: {request.TrackingId}");
+            }
+
+            _logger.LogInformation("Processing prompt: '{Prompt}'", request.Prompt);
+
+            // Create a job entry
+            var job = _trackByIdJobService.CreateJob(frames.Count);
+            _trackByIdJobService.UpdateProgress(job.JobId, 0, "Starting frame processing");
+
+            // Start background processing with diagnostics session ID
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ProcessTrackByIdInBackground(job.JobId, request, frames, diagnosticsSessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unhandled exception in background track-by-id processing for job {JobId}", job.JobId);
+                    _trackByIdJobService.FailJob(job.JobId, $"Unexpected error: {ex.Message}");
+                    _diagnosticsService.AddWarning(diagnosticsSessionId, $"Processing failed: {ex.Message}");
+                    _diagnosticsService.EndSession(diagnosticsSessionId);
+                }
+            });
+
             return Ok(new
             {
-                jobResponse.JobId,
-                jobResponse.Message,
-                jobResponse.TotalFrames,
+                JobId = job.JobId,
+                Message = "Track-by-id processing started. Use the job ID to check progress.",
+                TotalFrames = frames.Count,
                 DiagnosticsSessionId = diagnosticsSessionId
             });
         }
-
-        return result.Result!;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting track-by-id request for tracking ID: {TrackingId}", 
+                request.TrackingId);
+            _diagnosticsService.AddWarning(diagnosticsSessionId, $"Failed to start processing: {ex.Message}");
+            _diagnosticsService.EndSession(diagnosticsSessionId);
+            return StatusCode(500, "Internal server error");
+        }
     }
 
     /// <summary>
@@ -480,7 +537,7 @@ public class PersonTrackingController : ControllerBase
         return Ok(new { status = "healthy", timestamp = DateTime.UtcNow });
     }
 
-    private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames)
+    private async Task ProcessTrackByIdInBackground(string jobId, TrackByIdRequest request, List<byte[]> frames, string? diagnosticsSessionId = null)
     {
         const int ConversionProgressWeight = 20; // 20% for conversion
         const int ProcessingProgressWeight = 60; // 60% for actual processing
@@ -490,6 +547,18 @@ public class PersonTrackingController : ControllerBase
         {
             var totalFrames = frames.Count;
             
+            _logger.LogInformation("Processing {FrameCount} frames for tracking ID {TrackingId} with prompt: '{Prompt}'", 
+                totalFrames, request.TrackingId, request.Prompt);
+            
+            if (totalFrames == 0)
+            {
+                _logger.LogWarning("No frames to process for tracking ID {TrackingId}", request.TrackingId);
+                if (!string.IsNullOrEmpty(diagnosticsSessionId))
+                {
+                    _diagnosticsService.AddWarning(diagnosticsSessionId, "No frames to process - frame list is empty");
+                }
+            }
+            
             _trackByIdJobService.UpdateProgress(jobId, 0, "Converting frames to base64");
             
             // Convert frames to base64
@@ -498,12 +567,13 @@ public class PersonTrackingController : ControllerBase
             var framesAfterConversion = (int)(totalFrames * (ConversionProgressWeight / 100.0));
             _trackByIdJobService.UpdateProgress(jobId, framesAfterConversion, "Processing frames with tracking service");
 
-            // Create tracking request
+            // Create tracking request with diagnostics session ID
             var trackingRequest = new TrackingRequest
             {
                 ImagesBase64 = imagesBase64,
                 Prompt = request.Prompt,
-                Timestamp = request.Timestamp
+                Timestamp = request.Timestamp,
+                DiagnosticsSessionId = diagnosticsSessionId
             };
 
             var framesAfterProcessing = framesAfterConversion + (int)(totalFrames * (ProcessingProgressWeight / 100.0));
@@ -518,11 +588,24 @@ public class PersonTrackingController : ControllerBase
                 jobId, request.TrackingId);
 
             _trackByIdJobService.CompleteJob(jobId, response);
+            
+            // End diagnostics session after processing completes
+            if (!string.IsNullOrEmpty(diagnosticsSessionId))
+            {
+                _diagnosticsService.EndSession(diagnosticsSessionId);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing track-by-id job {JobId}", jobId);
             _trackByIdJobService.FailJob(jobId, ex.Message);
+            
+            // Record error in diagnostics
+            if (!string.IsNullOrEmpty(diagnosticsSessionId))
+            {
+                _diagnosticsService.AddWarning(diagnosticsSessionId, $"Processing error: {ex.Message}");
+                _diagnosticsService.EndSession(diagnosticsSessionId);
+            }
         }
     }
 

@@ -75,7 +75,8 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService, IHosted
             SessionId = sessionId,
             Timestamp = DateTime.UtcNow,
             TrackingId = trackingId,
-            Prompt = prompt
+            Prompt = prompt,
+            RawPrompt = prompt
         };
 
         _sessions[sessionId] = diagnostics;
@@ -182,6 +183,44 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService, IHosted
         _diagnosticsChannel.Writer.TryWrite(message);
     }
 
+    public void RecordFrameRetrieval(string sessionId, int frameCount, bool success, string? errorMessage = null)
+    {
+        if (!IsEnabled || string.IsNullOrEmpty(sessionId))
+        {
+            return;
+        }
+
+        // Send frame retrieval info to channel for async processing
+        var message = new DiagnosticsMessage
+        {
+            Type = DiagnosticsMessageType.FrameRetrieval,
+            SessionId = sessionId,
+            FrameCount = frameCount,
+            Success = success,
+            ErrorMessage = errorMessage
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
+    }
+
+    public void AddWarning(string sessionId, string warning)
+    {
+        if (!IsEnabled || string.IsNullOrEmpty(sessionId))
+        {
+            return;
+        }
+
+        // Send warning to channel for async processing
+        var message = new DiagnosticsMessage
+        {
+            Type = DiagnosticsMessageType.Warning,
+            SessionId = sessionId,
+            Warning = warning
+        };
+
+        _diagnosticsChannel.Writer.TryWrite(message);
+    }
+
     public InferenceDiagnostics? GetDiagnostics(string sessionId)
     {
         if (!IsEnabled || string.IsNullOrEmpty(sessionId))
@@ -266,6 +305,34 @@ public class InferenceDiagnosticsService : IInferenceDiagnosticsService, IHosted
                         }
                         break;
 
+                    case DiagnosticsMessageType.FrameRetrieval:
+                        diagnostics.FramesRetrieved = message.FrameCount;
+                        if (!message.Success && !string.IsNullOrEmpty(message.ErrorMessage))
+                        {
+                            lock (diagnostics.Warnings)
+                            {
+                                diagnostics.Warnings.Add($"Frame retrieval failed: {message.ErrorMessage}");
+                            }
+                        }
+                        else if (message.FrameCount == 0)
+                        {
+                            lock (diagnostics.Warnings)
+                            {
+                                diagnostics.Warnings.Add("No frames were retrieved from blob storage");
+                            }
+                        }
+                        break;
+
+                    case DiagnosticsMessageType.Warning:
+                        if (!string.IsNullOrEmpty(message.Warning))
+                        {
+                            lock (diagnostics.Warnings)
+                            {
+                                diagnostics.Warnings.Add(message.Warning);
+                            }
+                        }
+                        break;
+
                     case DiagnosticsMessageType.EndSession:
                         _logger.LogDebug("Ended diagnostics session {SessionId} with {LogCount} log entries", 
                             message.SessionId, diagnostics.LogEntries.Count);
@@ -326,7 +393,9 @@ internal enum DiagnosticsMessageType
     SearchCriteria,
     ImageDiagnostics,
     ProcessingSummary,
-    EndSession
+    EndSession,
+    FrameRetrieval,
+    Warning
 }
 
 /// <summary>
@@ -340,4 +409,8 @@ internal class DiagnosticsMessage
     public SearchCriteria? SearchCriteria { get; set; }
     public ImageProcessingDiagnostics? ImageDiagnostics { get; set; }
     public ProcessingSummary? ProcessingSummary { get; set; }
+    public int FrameCount { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? Warning { get; set; }
 }
