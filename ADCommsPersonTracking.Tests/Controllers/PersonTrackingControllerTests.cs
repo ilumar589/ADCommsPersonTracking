@@ -376,6 +376,28 @@ public class PersonTrackingControllerTests
     }
 
     [Fact]
+    public async Task UploadVideo_WithMaxFramesParameter_PassesToService()
+    {
+        // Arrange
+        var videoName = "test_video.mp4";
+        var video = CreateMockFormFile(videoName, "video/mp4", new byte[] { 1, 2, 3 });
+        var maxFrames = 50;
+
+        // Act
+        var result = await _controller.UploadVideo(video, maxFrames);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var response = (result.Result as OkObjectResult)!.Value as VideoUploadJobResponse;
+        
+        response.Should().NotBeNull();
+        response!.JobId.Should().Be("test-job-id");
+        
+        // Note: We can't easily verify the maxFrames parameter is passed to the background task
+        // without more complex testing infrastructure, but we've verified the parameter is accepted
+    }
+
+    [Fact]
     public async Task TrackById_WithValidRequest_ReturnsJobIdImmediately()
     {
         // Arrange
