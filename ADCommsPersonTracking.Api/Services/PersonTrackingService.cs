@@ -13,6 +13,7 @@ public class PersonTrackingService : IPersonTrackingService
     private readonly IColorAnalysisService _colorAnalysisService;
     private readonly IAccessoryDetectionService _accessoryDetectionService;
     private readonly IPhysicalAttributeEstimator _physicalAttributeEstimator;
+    private readonly IInferenceDiagnosticsService _diagnosticsService;
     private readonly ILogger<PersonTrackingService> _logger;
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, PersonTrack> _activeTracks = new();
@@ -26,6 +27,7 @@ public class PersonTrackingService : IPersonTrackingService
         IColorAnalysisService colorAnalysisService,
         IAccessoryDetectionService accessoryDetectionService,
         IPhysicalAttributeEstimator physicalAttributeEstimator,
+        IInferenceDiagnosticsService diagnosticsService,
         IConfiguration configuration,
         ILogger<PersonTrackingService> logger)
     {
@@ -35,6 +37,7 @@ public class PersonTrackingService : IPersonTrackingService
         _colorAnalysisService = colorAnalysisService;
         _accessoryDetectionService = accessoryDetectionService;
         _physicalAttributeEstimator = physicalAttributeEstimator;
+        _diagnosticsService = diagnosticsService;
         _configuration = configuration;
         _logger = logger;
         _maxDegreeOfParallelism = configuration.GetValue("Processing:MaxDegreeOfParallelism", Environment.ProcessorCount);
@@ -290,6 +293,13 @@ public class PersonTrackingService : IPersonTrackingService
                 ProcessingMessage = $"Error: {ex.Message}"
             };
         }
+    }
+
+    public async Task<TrackingResponse> ProcessFrameWithDiagnosticsAsync(TrackingRequest request, string diagnosticsSessionId)
+    {
+        // This method wraps ProcessFrameAsync with additional diagnostics collection
+        // For now, just call the existing method - diagnostics are collected via logging
+        return await ProcessFrameAsync(request);
     }
 
     public Task<List<PersonTrack>> GetActiveTracksAsync()
