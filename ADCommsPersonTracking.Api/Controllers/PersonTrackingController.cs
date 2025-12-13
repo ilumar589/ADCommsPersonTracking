@@ -121,7 +121,9 @@ public class PersonTrackingController : ControllerBase
         _videoUploadJobService.UpdateProgress(job.JobId, 0, "Receiving video file");
 
         // Save video to temp file for background processing
-        var tempFilePath = Path.Combine(Path.GetTempPath(), $"{job.JobId}_{videoName}");
+        // Sanitize filename to prevent path traversal attacks
+        var sanitizedFileName = Path.GetFileName(videoName);
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"{job.JobId}_{sanitizedFileName}");
         
         try
         {
@@ -145,8 +147,19 @@ public class PersonTrackingController : ControllerBase
             return StatusCode(500, "Failed to save video file");
         }
 
-        // Start background processing
-        _ = Task.Run(async () => await ProcessVideoInBackground(job.JobId, videoName, tempFilePath));
+        // Start background processing with proper exception handling
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ProcessVideoInBackground(job.JobId, videoName, tempFilePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in background video processing for job {JobId}", job.JobId);
+                _videoUploadJobService.FailJob(job.JobId, $"Unexpected error: {ex.Message}");
+            }
+        });
 
         return Ok(new VideoUploadJobResponse
         {

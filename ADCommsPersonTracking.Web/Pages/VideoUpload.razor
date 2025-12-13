@@ -150,6 +150,7 @@
 
         // Cancel any existing polling
         _pollingCancellation?.Cancel();
+        _pollingCancellation?.Dispose();
         _pollingCancellation = new CancellationTokenSource();
 
         try
