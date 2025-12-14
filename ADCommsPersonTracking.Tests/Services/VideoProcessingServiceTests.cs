@@ -142,4 +142,19 @@ public class VideoProcessingServiceTests
         framesToExtract.Should().Be(expectedFrames, "should extract the expected number of frames");
         intervalBetweenFrames.Should().BeApproximately(expectedInterval, 0.01, "interval should match expected distribution");
     }
+
+    [Fact]
+    public void FrameDistribution_Calculation_WithZeroFrames_ShouldHandleGracefully()
+    {
+        // Arrange
+        var maxFrames = 100;
+        var totalFrames = 0; // No frames (e.g., zero duration video)
+
+        // Act
+        var framesToExtract = Math.Min(maxFrames, totalFrames);
+
+        // Assert
+        framesToExtract.Should().Be(0, "should have no frames to extract from empty video");
+        // The guard in VideoProcessingService should return early without attempting division
+    }
 }

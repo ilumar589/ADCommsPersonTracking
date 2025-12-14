@@ -95,6 +95,7 @@ public class VideoProcessingService : IVideoProcessingService
         try
         {
             var effectiveMaxFrames = maxFrames ?? _configuration.GetValue<int>("VideoProcessing:MaxFrames", 100);
+            // frameInterval is kept for backward compatibility in logging but is no longer used in calculation
             var frameInterval = _configuration.GetValue<int>("VideoProcessing:FrameInterval", 1);
 
             // Save the video stream to a temporary file
@@ -121,6 +122,14 @@ public class VideoProcessingService : IVideoProcessingService
                 var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames);
                 
                 _logger.LogFrameExtraction(totalFrames, framesToExtract);
+
+                // Guard against empty videos or zero frames
+                if (framesToExtract <= 0)
+                {
+                    _logger.LogWarning("No frames to extract from video {FileName} (total frames: {TotalFrames}, max frames: {MaxFrames})", 
+                        fileName, totalFrames, effectiveMaxFrames);
+                    return frames;
+                }
 
                 // Calculate the interval between frames based on video duration to distribute frames evenly
                 var intervalBetweenFrames = duration.TotalSeconds / framesToExtract;
