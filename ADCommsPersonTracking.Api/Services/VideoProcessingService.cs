@@ -118,14 +118,17 @@ public class VideoProcessingService : IVideoProcessingService
 
                 // Calculate how many frames to extract
                 var totalFrames = (int)(duration.TotalSeconds * frameRate);
-                var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames / frameInterval);
+                var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames);
                 
                 _logger.LogFrameExtraction(totalFrames, framesToExtract);
 
-                // Extract frames at intervals
+                // Calculate the interval between frames based on video duration to distribute frames evenly
+                var intervalBetweenFrames = duration.TotalSeconds / framesToExtract;
+
+                // Extract frames distributed evenly across the video
                 for (int i = 0; i < framesToExtract; i++)
                 {
-                    var timeOffset = TimeSpan.FromSeconds(i * frameInterval / frameRate);
+                    var timeOffset = TimeSpan.FromSeconds(i * intervalBetweenFrames);
                     
                     // Create temporary file for frame output
                     var tempFramePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
