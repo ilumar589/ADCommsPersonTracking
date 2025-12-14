@@ -132,6 +132,8 @@ public class VideoProcessingService : IVideoProcessingService
                 }
 
                 // Calculate the interval between frames based on video duration to distribute frames evenly
+                // Using duration/count ensures even spacing: for 60s video with 30 frames: 0s, 2s, 4s, ... 58s
+                // This avoids sampling at the exact end (60s) which could be beyond valid frame range
                 var intervalBetweenFrames = duration.TotalSeconds / framesToExtract;
 
                 // Extract frames distributed evenly across the video
