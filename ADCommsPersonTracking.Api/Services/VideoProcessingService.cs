@@ -95,6 +95,7 @@ public class VideoProcessingService : IVideoProcessingService
         try
         {
             var effectiveMaxFrames = maxFrames ?? _configuration.GetValue<int>("VideoProcessing:MaxFrames", 100);
+            // frameInterval is kept for backward compatibility in logging but is no longer used in calculation
             var frameInterval = _configuration.GetValue<int>("VideoProcessing:FrameInterval", 1);
 
             // Save the video stream to a temporary file
@@ -118,14 +119,27 @@ public class VideoProcessingService : IVideoProcessingService
 
                 // Calculate how many frames to extract
                 var totalFrames = (int)(duration.TotalSeconds * frameRate);
-                var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames / frameInterval);
+                var framesToExtract = Math.Min(effectiveMaxFrames, totalFrames);
                 
                 _logger.LogFrameExtraction(totalFrames, framesToExtract);
 
-                // Extract frames at intervals
+                // Guard against empty videos or zero frames
+                if (framesToExtract <= 0)
+                {
+                    _logger.LogWarning("No frames to extract from video {FileName} (total frames: {TotalFrames}, max frames: {MaxFrames})", 
+                        fileName, totalFrames, effectiveMaxFrames);
+                    return frames;
+                }
+
+                // Calculate the interval between frames based on video duration to distribute frames evenly
+                // Using duration/count ensures even spacing: for 60s video with 30 frames: 0s, 2s, 4s, ... 58s
+                // This avoids sampling at the exact end (60s) which could be beyond valid frame range
+                var intervalBetweenFrames = duration.TotalSeconds / framesToExtract;
+
+                // Extract frames distributed evenly across the video
                 for (int i = 0; i < framesToExtract; i++)
                 {
-                    var timeOffset = TimeSpan.FromSeconds(i * frameInterval / frameRate);
+                    var timeOffset = TimeSpan.FromSeconds(i * intervalBetweenFrames);
                     
                     // Create temporary file for frame output
                     var tempFramePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
