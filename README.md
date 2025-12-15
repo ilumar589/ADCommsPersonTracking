@@ -6,26 +6,31 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 
 - **Video Frame Processing**: Receives and processes video frames from multiple train cameras
 - **Person Detection**: Uses YOLO11 ONNX model for lightweight, efficient person detection
+- **Clothing Detection**: Optional fashion-trained YOLO model for detecting specific clothing items (jacket, shirt, pants, dress, etc.)
 - **Rule-Based Feature Extraction**: Parses natural language prompts to extract colors, clothing, accessories, and physical attributes
 - **Image Annotation**: Returns annotated images with bounding boxes drawn around detected persons
 - **Cross-Camera Tracking**: Tracks persons as they move between different camera views
 - **Bounding Box Output**: Returns precise bounding boxes with annotated images for all detections
 - **RESTful API**: Easy-to-use HTTP API for integration with camera systems
-- **Comprehensive Testing**: 59 unit tests + Docker-based integration tests with real YOLO11 model inference
+- **Comprehensive Testing**: 156+ unit tests + Docker-based integration tests with real YOLO11 model inference
 
 ## Architecture
 
 ### Components
 
 1. **Object Detection Service**: Uses YOLO11 (ONNX Runtime) for fast person detection
-2. **Prompt Feature Extractor**: Parses natural language prompts to extract:
+2. **Clothing Detection Service**: Optional fashion-trained YOLO model for detecting clothing items on persons
+   - Supports detection of: shirts, jackets, coats, pants, jeans, shorts, skirts, dresses, sweaters, hoodies, vests
+   - Runs inference on cropped person images for accurate clothing classification
+   - Disabled by default (can be enabled in configuration)
+3. **Prompt Feature Extractor**: Parses natural language prompts to extract:
    - Colors (red, blue, green, yellow, black, white, etc.)
    - Clothing items (jacket, coat, shirt, pants, etc.)
    - Accessories (bag, backpack, suitcase, umbrella, etc.)
    - Physical attributes (height, build)
-3. **Image Annotation Service**: Draws bounding boxes on images with optional labels
-4. **Person Tracking Service**: Coordinates detection and tracking across cameras
-5. **REST API**: Exposes endpoints for frame submission and track queries
+4. **Image Annotation Service**: Draws bounding boxes on images with optional labels
+5. **Person Tracking Service**: Coordinates detection and tracking across cameras
+6. **REST API**: Exposes endpoints for frame submission and track queries
 
 ### Technology Stack
 
@@ -88,7 +93,50 @@ Download from Ultralytics GitHub releases or HuggingFace:
 
 Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
-### 3. Build and Run
+### 3. (Optional) Get the Fashion Detection Model
+
+For enhanced clothing detection (jacket, shirt, pants, dress, etc.), you can optionally set up a fashion-trained YOLO model:
+
+#### Option 1: Use the Placeholder Script
+
+```bash
+python3 download-fashion-model.py
+```
+
+**Note**: This downloads a generic YOLOv8n model as a placeholder. It will **not** detect clothing items correctly.
+
+#### Option 2: Train or Download a Fashion Model
+
+For production use, you need a fashion-trained YOLO model:
+
+1. **Train your own**:
+   - Download [DeepFashion2 dataset](https://github.com/switchablenorms/DeepFashion2)
+   - Train YOLOv8: `yolo train data=deepfashion2.yaml model=yolov8n.pt`
+   - Export to ONNX: `model.export(format='onnx')`
+
+2. **Use pre-trained models**:
+   - Check [Ultralytics Hub](https://hub.ultralytics.com/)
+   - Check [HuggingFace](https://huggingface.co/models?search=fashion+yolo)
+
+3. Place the model at `ADCommsPersonTracking.Api/models/fashion-yolo.onnx`
+
+4. Enable in configuration:
+   ```json
+   {
+     "ClothingDetection": {
+       "Enabled": true,
+       "ModelPath": "models/fashion-yolo.onnx",
+       "ConfidenceThreshold": 0.5
+     }
+   }
+   ```
+
+**Supported Fashion Categories**:
+- Upper body: shirt, t-shirt, jacket, coat, sweater, hoodie, vest, blouse
+- Lower body: pants, jeans, shorts, skirt, leggings
+- Full body: dress
+
+### 4. Build and Run
 
 #### Option A: Run with .NET Aspire (Recommended)
 
@@ -137,7 +185,7 @@ dotnet run
 
 The API will start on `https://localhost:5001` (or `http://localhost:5000`).
 
-### 4. Run Tests
+### 5. Run Tests
 
 #### Unit Tests Only
 ```bash
@@ -145,7 +193,7 @@ cd /path/to/ADCommsPersonTracking
 dotnet test --filter "Category!=Integration"
 ```
 
-All 59 unit tests should pass.
+All 156+ unit tests should pass.
 
 #### Integration Tests (Optional)
 Integration tests use Docker and Testcontainers to test the YOLO11 model with real inference. See [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md) for details.
@@ -495,7 +543,13 @@ Edit `appsettings.json` to configure the application:
   "ObjectDetection": {
     "ModelPath": "models/yolo11x.onnx",
     "ConfidenceThreshold": 0.45,
+    "AccessoryConfidenceThreshold": 0.25,
     "IouThreshold": 0.5
+  },
+  "ClothingDetection": {
+    "Enabled": false,
+    "ModelPath": "models/fashion-yolo.onnx",
+    "ConfidenceThreshold": 0.5
   },
   "ImageAnnotation": {
     "BoxColor": "#00FF00",
@@ -505,6 +559,16 @@ Edit `appsettings.json` to configure the application:
   }
 }
 ```
+
+### Clothing Detection Configuration
+
+The `ClothingDetection` section configures the optional fashion-trained YOLO model:
+
+- **Enabled**: Set to `true` to enable clothing detection (default: `false`)
+- **ModelPath**: Path to the fashion ONNX model (default: `models/fashion-yolo.onnx`)
+- **ConfidenceThreshold**: Minimum confidence for clothing detections (default: `0.5`)
+
+**Note**: Clothing detection requires a fashion-trained YOLO model. The standard COCO-trained YOLO11 model only detects a very limited set of clothing items (tie). See the "Get the Fashion Detection Model" section above for setup instructions.
 
 ### Model Selection
 
@@ -536,20 +600,44 @@ For old hardware, consider:
    - Clothing items (jacket, pants, hat, etc.)
    - Accessories (backpack, suitcase, umbrella, etc.)
    - Physical attributes (height, build)
-4. **Image Annotation**: Draws bounding boxes on the original image
-5. **Tracking**: System assigns tracking IDs and maintains person trajectories
-6. **Response**: Returns annotated image with bounding boxes and detection data
+4. **Attribute Analysis**: For each detected person:
+   - Color analysis on person bounding box regions
+   - YOLO11 detects accessories (backpack, handbag, suitcase)
+   - Optional fashion model detects clothing items (if enabled)
+   - Physical attribute estimation (height, build)
+5. **Matching**: Filters persons based on extracted criteria from prompt
+6. **Image Annotation**: Draws bounding boxes on the original image
+7. **Tracking**: System assigns tracking IDs and maintains person trajectories
+8. **Response**: Returns annotated image with bounding boxes and detection data
 
-## Important Note: Current Limitations
+## Important Note: Clothing Detection Limitations
 
-**The system currently returns ALL detected persons in the frame, regardless of the search prompt criteria.** The prompt feature extraction (colors, clothing, etc.) is implemented and parsed, but the actual filtering by those attributes is not yet functional. To implement attribute-based filtering, you would need to integrate an additional computer vision model that can recognize clothing colors, accessories, and other visual attributes.
+**Standard YOLO Models and Clothing Detection**:
+- The standard YOLO11 model (trained on COCO dataset) can only detect a very limited set of clothing/accessory items:
+  - Accessories: backpack, handbag, suitcase
+  - Clothing: tie (that's the only clothing item!)
+- Items like jacket, shirt, pants, dress, shorts, etc. are **NOT detectable** with the standard COCO-trained YOLO model.
 
-This implementation provides the foundation for person detection and tracking. The extracted features from the prompt are included in the response for reference, but they do not filter the detections.
+**Fashion Model Required for Clothing Detection**:
+- To enable detection of actual clothing items (jacket, shirt, pants, dress, etc.), you need to set up a fashion-trained YOLO model.
+- The system includes a `ClothingDetectionService` that can use fashion-trained models.
+- By default, clothing detection is **disabled** (set `ClothingDetection:Enabled: false` in configuration).
+- See the "Get the Fashion Detection Model" section for setup instructions.
+
+**What Works Without Fashion Model**:
+- Person detection
+- Color analysis (dominant colors on person's clothing)
+- Accessory detection (backpack, handbag, suitcase via YOLO11)
+- Physical attribute estimation (height, build)
+
+**What Requires Fashion Model**:
+- Specific clothing item detection (jacket, shirt, pants, dress, etc.)
+- Searching by clothing criteria like "person with blue jacket"
 
 ## Testing
 
 ### Unit Tests
-The project includes 59 comprehensive unit tests covering:
+The project includes 156+ comprehensive unit tests covering:
 - Object detection service (YOLO11 integration)
 - Person tracking and ID assignment
 - Image annotation and bounding box drawing
