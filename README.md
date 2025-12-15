@@ -40,7 +40,7 @@ A .NET 10 web application for real-time person tracking across train cameras usi
 
 - .NET 10 SDK
 - Docker Desktop (for running with Aspire)
-- YOLO11 ONNX model (yolo11m.onnx recommended, or other variants) - required for person detection
+- YOLO11 ONNX model (yolo11x.onnx recommended, or other variants) - required for person detection
 - **FFmpeg binaries are automatically downloaded** on first video upload (no manual installation required)
 
 ## Installation
@@ -65,16 +65,16 @@ cd ADCommsPersonTracking
    ```python
    from ultralytics import YOLO
    
-   # Download and load YOLO11 medium model (better accuracy)
-   model = YOLO('yolo11m.pt')
+   # Download and load YOLO11 extra-large model (best accuracy)
+   model = YOLO('yolo11x.pt')
    
    # Export to ONNX format
    model.export(format='onnx', simplify=True, dynamic=False, imgsz=640)
    ```
-4. Move the generated `yolo11m.onnx` to `ADCommsPersonTracking.Api/models/`:
+4. Move the generated `yolo11x.onnx` to `ADCommsPersonTracking.Api/models/`:
    ```bash
    mkdir -p ADCommsPersonTracking.Api/models
-   mv yolo11m.onnx ADCommsPersonTracking.Api/models/
+   mv yolo11x.onnx ADCommsPersonTracking.Api/models/
    ```
 
 #### Option 2: Download Pre-exported Model
@@ -82,9 +82,9 @@ cd ADCommsPersonTracking
 Download from Ultralytics GitHub releases or HuggingFace:
 - **yolo11n.onnx** (~6MB) - Nano, fastest (for old hardware)
 - **yolo11s.onnx** (~22MB) - Small
-- **yolo11m.onnx** (~50MB) - Medium (recommended, default)
+- **yolo11m.onnx** (~50MB) - Medium
 - **yolo11l.onnx** (~87MB) - Large
-- **yolo11x.onnx** (~136MB) - Extra Large
+- **yolo11x.onnx** (~136MB) - Extra Large (recommended, default)
 
 Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
@@ -222,20 +222,20 @@ docker run --rm -v "%cd%/../../models:/models" yolo-model-export:latest
 
 **Linux/macOS:**
 ```bash
-ls -la ../../models/yolo11m.onnx
+ls -la ../../models/yolo11x.onnx
 ```
 
 **Windows PowerShell:**
 ```powershell
-Get-ChildItem ../../models/yolo11m.onnx
+Get-ChildItem ../../models/yolo11x.onnx
 ```
 
 **Windows Command Prompt:**
 ```cmd
-dir ..\..\models\yolo11m.onnx
+dir ..\..\models\yolo11x.onnx
 ```
 
-You should see a file approximately 50MB in size.
+You should see a file approximately 136MB in size.
 
 ### What the Container Does
 
@@ -246,7 +246,7 @@ The `yolo-model-export` container performs the following operations:
    - Simplified model structure
    - Fixed input size (640x640)
    - Static batch size for better performance
-3. **Saves to Models Directory** - The exported `yolo11m.onnx` file is saved to the `models/` directory through the volume mount
+3. **Saves to Models Directory** - The exported `yolo11x.onnx` file is saved to the `models/` directory through the volume mount
 4. **Exits Automatically** - The container completes and exits after the export is finished
 
 The entire process typically takes 2-5 minutes on the first run when downloading weights from the internet.
@@ -493,7 +493,7 @@ Edit `appsettings.json` to configure the application:
 ```json
 {
   "ObjectDetection": {
-    "ModelPath": "models/yolo11m.onnx",
+    "ModelPath": "models/yolo11x.onnx",
     "ConfidenceThreshold": 0.45,
     "IouThreshold": 0.5
   },
@@ -512,9 +512,9 @@ The system supports different YOLO11 model sizes:
 
 - **yolo11n.onnx**: Nano - Fastest, lowest accuracy (for old hardware)
 - **yolo11s.onnx**: Small - Good balance
-- **yolo11m.onnx**: Medium - Better accuracy (default, recommended)
+- **yolo11m.onnx**: Medium - Better accuracy
 - **yolo11l.onnx**: Large - High accuracy
-- **yolo11x.onnx**: Extra Large - Best accuracy, slowest
+- **yolo11x.onnx**: Extra Large - Best accuracy, best for accessory detection (default, recommended)
 
 Update the `ModelPath` in `appsettings.json` to use different models.
 
