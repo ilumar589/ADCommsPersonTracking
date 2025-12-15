@@ -18,7 +18,7 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
     private readonly IConfiguration _configuration;
     private InferenceSession? _session;
     private readonly string? _modelPath;
-    private readonly bool _enabled;
+    private bool _enabled;  // Not readonly because it can be disabled if model loading fails
     private readonly float _confidenceThreshold;
     private const int InputWidth = 640;
     private const int InputHeight = 640;
