@@ -1,6 +1,7 @@
 using ADCommsPersonTracking.Api.Helpers;
 using ADCommsPersonTracking.Api.Logging;
 using ADCommsPersonTracking.Api.Models;
+using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
 
 namespace ADCommsPersonTracking.Api.Services;
@@ -12,6 +13,7 @@ public class PersonTrackingService : IPersonTrackingService
     private readonly IImageAnnotationService _annotationService;
     private readonly IColorAnalysisService _colorAnalysisService;
     private readonly IAccessoryDetectionService _accessoryDetectionService;
+    private readonly IClothingDetectionService _clothingDetectionService;
     private readonly IPhysicalAttributeEstimator _physicalAttributeEstimator;
     private readonly IInferenceDiagnosticsService _diagnosticsService;
     private readonly ILogger<PersonTrackingService> _logger;
@@ -26,6 +28,7 @@ public class PersonTrackingService : IPersonTrackingService
         IImageAnnotationService annotationService,
         IColorAnalysisService colorAnalysisService,
         IAccessoryDetectionService accessoryDetectionService,
+        IClothingDetectionService clothingDetectionService,
         IPhysicalAttributeEstimator physicalAttributeEstimator,
         IInferenceDiagnosticsService diagnosticsService,
         IConfiguration configuration,
@@ -36,6 +39,7 @@ public class PersonTrackingService : IPersonTrackingService
         _annotationService = annotationService;
         _colorAnalysisService = colorAnalysisService;
         _accessoryDetectionService = accessoryDetectionService;
+        _clothingDetectionService = clothingDetectionService;
         _physicalAttributeEstimator = physicalAttributeEstimator;
         _diagnosticsService = diagnosticsService;
         _configuration = configuration;
@@ -286,6 +290,17 @@ public class PersonTrackingService : IPersonTrackingService
                             else
                             {
                                 accessoryResult = await _accessoryDetectionService.DetectAccessoriesAsync(imageBytes, detection);
+                            }
+
+                            // Detect clothing items using fashion model on cropped person image
+                            var clothingItems = await DetectClothingOnPersonAsync(imageBytes, detection);
+                            
+                            // Merge clothing detections into accessory result
+                            if (clothingItems.Count > 0)
+                            {
+                                accessoryResult.ClothingItems.AddRange(clothingItems);
+                                _logger.LogInformation("Detected {ClothingCount} clothing items via fashion model for person {PersonIndex}", 
+                                    clothingItems.Count, idx);
                             }
 
                             // Check if person matches ALL criteria
@@ -673,6 +688,46 @@ public class PersonTrackingService : IPersonTrackingService
         else
         {
             return $"✗ Searched for: {searchStr}. Detected: {detectedAttrs}, height: ~{physicalAttributes.EstimatedHeightMeters:F2}m. No match";
+        }
+    }
+
+    /// <summary>
+    /// Crop person from image and detect clothing items using fashion model.
+    /// </summary>
+    private async Task<List<DetectedItem>> DetectClothingOnPersonAsync(byte[] imageBytes, BoundingBox personBox)
+    {
+        try
+        {
+            // Crop person region from image
+            using var memoryStream = new MemoryStream(imageBytes);
+            using var image = await SixLabors.ImageSharp.Image.LoadAsync<SixLabors.ImageSharp.PixelFormats.Rgb24>(memoryStream);
+            
+            // Ensure bounding box is within image bounds
+            var x = Math.Max(0, (int)personBox.X);
+            var y = Math.Max(0, (int)personBox.Y);
+            var width = Math.Min((int)personBox.Width, image.Width - x);
+            var height = Math.Min((int)personBox.Height, image.Height - y);
+
+            if (width <= 0 || height <= 0)
+            {
+                return new List<DetectedItem>();
+            }
+
+            // Crop the person region
+            image.Mutate(ctx => ctx.Crop(new SixLabors.ImageSharp.Rectangle(x, y, width, height)));
+
+            // Convert cropped image to bytes
+            using var croppedStream = new MemoryStream();
+            await image.SaveAsync(croppedStream, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+            var croppedBytes = croppedStream.ToArray();
+
+            // Run clothing detection on cropped image
+            return await _clothingDetectionService.DetectClothingAsync(croppedBytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting clothing on person");
+            return new List<DetectedItem>();
         }
     }
 }

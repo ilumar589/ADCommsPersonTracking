@@ -22,6 +22,7 @@ builder.Services.AddSingleton<IPromptFeatureExtractor, PromptFeatureExtractor>()
 builder.Services.AddSingleton<IImageAnnotationService, ImageAnnotationService>();
 builder.Services.AddSingleton<IColorAnalysisService, ColorAnalysisService>();
 builder.Services.AddSingleton<IAccessoryDetectionService, AccessoryDetectionService>();
+builder.Services.AddSingleton<IClothingDetectionService, ClothingDetectionService>();
 builder.Services.AddSingleton<IPhysicalAttributeEstimator, PhysicalAttributeEstimator>();
 
 // Register diagnostics service as both singleton and hosted service
