@@ -16,6 +16,7 @@ public class PersonTrackingServiceTests
     private readonly Mock<IImageAnnotationService> _annotationServiceMock;
     private readonly Mock<IColorAnalysisService> _colorAnalysisServiceMock;
     private readonly Mock<IAccessoryDetectionService> _accessoryDetectionServiceMock;
+    private readonly Mock<IClothingDetectionService> _clothingDetectionServiceMock;
     private readonly Mock<IPhysicalAttributeEstimator> _physicalAttributeEstimatorMock;
     private readonly PersonTrackingService _service;
 
@@ -26,6 +27,7 @@ public class PersonTrackingServiceTests
         _annotationServiceMock = new Mock<IImageAnnotationService>();
         _colorAnalysisServiceMock = new Mock<IColorAnalysisService>();
         _accessoryDetectionServiceMock = new Mock<IAccessoryDetectionService>();
+        _clothingDetectionServiceMock = new Mock<IClothingDetectionService>();
         _physicalAttributeEstimatorMock = new Mock<IPhysicalAttributeEstimator>();
         
         // Create a real configuration for testing with parallelism disabled
@@ -47,6 +49,7 @@ public class PersonTrackingServiceTests
             _annotationServiceMock.Object,
             _colorAnalysisServiceMock.Object,
             _accessoryDetectionServiceMock.Object,
+            _clothingDetectionServiceMock.Object,
             _physicalAttributeEstimatorMock.Object,
             diagnosticsServiceMock.Object,
             configuration,
@@ -69,6 +72,10 @@ public class PersonTrackingServiceTests
         _accessoryDetectionServiceMock
             .Setup(s => s.MatchesCriteria(It.IsAny<AccessoryDetectionResult>(), It.IsAny<List<string>>(), It.IsAny<List<string>>()))
             .Returns(true);
+
+        _clothingDetectionServiceMock
+            .Setup(s => s.DetectClothingAsync(It.IsAny<byte[]>(), It.IsAny<float?>()))
+            .ReturnsAsync(new List<DetectedItem>());
 
         _physicalAttributeEstimatorMock
             .Setup(s => s.EstimateAttributesAsync(It.IsAny<byte[]>(), It.IsAny<BoundingBox>(), It.IsAny<int>(), It.IsAny<int>()))
