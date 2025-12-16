@@ -24,9 +24,10 @@ var blobs = storage.AddBlobs("blobs");
 // Add Redis for caching
 var redis = builder.AddRedis("redis");
 
-// Add API with model path configured via environment variable
+// Add API with model paths configured via environment variables
 // Note: We don't wait for yoloModelExport or fashionModelExport because they're designed to exit after completing the export
-// The API will validate that the model files exist during startup instead
+// The API services (ObjectDetectionService, ClothingDetectionService) validate that model files exist during startup
+// If a model is missing, the corresponding service logs a warning and gracefully disables that feature
 var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersontracking-api")
     .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, yoloModel))
     .WithEnvironment("ClothingDetection__Enabled", "true")
