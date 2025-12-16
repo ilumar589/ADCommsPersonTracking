@@ -66,6 +66,8 @@ public class PersonDetectionDiagnostics
     public BoundingBoxDiagnostics PersonBox { get; set; } = new();
     public ColorAnalysisDiagnostics ColorAnalysis { get; set; } = new();
     public AccessoryMatchingDiagnostics AccessoryMatching { get; set; } = new();
+    public ClothingDetectionDiagnostics? ClothingDetection { get; set; }
+    public ClothingColorAnalysisDiagnostics? ClothingColorAnalysis { get; set; }
     public CriteriaMatchingDiagnostics CriteriaMatching { get; set; } = new();
     public bool WasIncludedInResults { get; set; }
     public string ExclusionReason { get; set; } = string.Empty;
@@ -83,6 +85,36 @@ public class AccessoryMatchingDiagnostics
     public List<AccessoryAssociationAttempt> AssociationAttempts { get; set; } = new();
     public List<string> AssociatedAccessories { get; set; } = new();
     public List<string> AssociatedClothing { get; set; } = new();
+}
+
+public class ClothingDetectionDiagnostics
+{
+    public List<ClothingDetectionEntry> RawDetections { get; set; } = new();
+    public float ThresholdUsed { get; set; }
+    public int DetectionsAboveThreshold { get; set; }
+    public int DetectionsBelowThreshold { get; set; }
+}
+
+public class ClothingDetectionEntry
+{
+    public string ClassName { get; set; } = string.Empty;
+    public float Confidence { get; set; }
+    public BoundingBoxDiagnostics BoundingBox { get; set; } = new();
+    public bool PassedThreshold { get; set; }
+}
+
+public class ClothingColorAnalysisDiagnostics
+{
+    public List<ClothingItemWithColors> ClothingItems { get; set; } = new();
+    public string MatchResult { get; set; } = string.Empty;
+}
+
+public class ClothingItemWithColors
+{
+    public string Label { get; set; } = string.Empty;
+    public float Confidence { get; set; }
+    public BoundingBoxDiagnostics BoundingBox { get; set; } = new();
+    public List<string> DetectedColors { get; set; } = new();
 }
 
 public class AccessoryAssociationAttempt
