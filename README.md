@@ -791,18 +791,52 @@ The system maintains person tracks across cameras by:
 
 If you see "YOLO11 ONNX model not found", the system will use mock detections. Download and place the YOLO11 model at the configured path as described in the installation section.
 
+### Fashion Model Issues
+
+**Fashion model not loading:**
+1. Check that `ClothingDetection:Enabled` is set to `true` in `appsettings.json`
+2. Verify the fashion model exists at `models/fashion-yolo.onnx`
+3. Run `python3 download-fashion-model.py` to download the model
+4. Check logs for model loading errors
+
+**No clothing detected:**
+1. Lower the confidence threshold: `ClothingDetection:ConfidenceThreshold` (try 0.25)
+2. Ensure persons are clearly visible in frames
+3. Check that the fashion model successfully loaded (look for log message)
+4. Fashion detection runs on cropped person images - ensure person bounding boxes are accurate
+
+**Color+Clothing queries not matching:**
+1. Verify fashion model is enabled and loaded
+2. Check that both color AND clothing are specified (e.g., "blue jacket")
+3. The system falls back to original matching if fashion model returns no results
+4. Try lowering the confidence threshold if clothing items aren't being detected
+5. Check diagnostics to see what colors are detected on each clothing item
+
 ### Low Detection Accuracy
 
 - Ensure adequate lighting in camera feeds
 - Use higher resolution frames
 - Consider using a larger YOLO11 model (s, m, l variants)
-- Adjust the `ConfidenceThreshold` in `appsettings.json` (default: 0.45)
+- Adjust the `ConfidenceThreshold` in `appsettings.json` (default: 0.45 for YOLO11, 0.3 for fashion)
 
 ### No Bounding Boxes Visible
 
 - Check that `ImageAnnotation:ShowLabels` is set to `true`
 - Verify the `BoxColor` is visible against your image background
 - Increase `BoxThickness` if boxes are too thin
+
+### Aspire Container Issues
+
+**Fashion model export container fails:**
+1. Check Docker is running: `docker ps`
+2. Ensure internet access for HuggingFace download
+3. Check container logs: `docker logs fashion-model-export`
+4. Manually run export: `cd docker/fashion-model-export && docker build -t fashion-model-export . && docker run -v /path/to/models:/models fashion-model-export`
+
+**Model not shared between containers:**
+1. Verify the `models/` directory exists in the solution root
+2. Check volume mounts in Aspire configuration
+3. Ensure both export containers use the same mount path: `/models`
 
 ## License
 
