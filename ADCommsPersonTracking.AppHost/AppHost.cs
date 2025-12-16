@@ -32,7 +32,7 @@ var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersont
     .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, yoloModel))
     .WithEnvironment("ClothingDetection__Enabled", "true")
     .WithEnvironment("ClothingDetection__ModelPath", Path.Combine(modelsPath, "fashion-yolo.onnx"))
-    .WithEnvironment("ClothingDetection__ConfidenceThreshold", "0.5")
+    .WithEnvironment("ClothingDetection__ConfidenceThreshold", "0.3")
     .WithReference(blobs)
     .WithReference(redis)
     .WithExternalHttpEndpoints();

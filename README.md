@@ -93,48 +93,66 @@ Download from Ultralytics GitHub releases or HuggingFace:
 
 Place the downloaded model in `ADCommsPersonTracking.Api/models/`
 
-### 3. (Optional) Get the Fashion Detection Model
+### 3. Get the Fashion Detection Model
 
-For enhanced clothing detection (jacket, shirt, pants, dress, etc.), you can optionally set up a fashion-trained YOLO model:
+For enhanced clothing detection and color+clothing queries (e.g., "blue jacket"), the system uses a Fashionpedia-trained YOLO model:
 
-#### Option 1: Use the Placeholder Script
+#### Automatic Download (Recommended)
 
 ```bash
 python3 download-fashion-model.py
 ```
 
-**Note**: This downloads a generic YOLOv8n model as a placeholder. It will **not** detect clothing items correctly.
+This script automatically downloads the **keremberke/yolov8m-fashion-detection** model from HuggingFace and exports it to ONNX format.
 
-#### Option 2: Train or Download a Fashion Model
+**Model Details**:
+- **Source**: [keremberke/yolov8m-fashion-detection](https://huggingface.co/keremberke/yolov8m-fashion-detection)
+- **Dataset**: Fashionpedia
+- **Size**: ~50 MB (YOLOv8m)
+- **Classes**: 27 fashion categories
 
-For production use, you need a fashion-trained YOLO model:
+#### Supported Fashion Categories
 
-1. **Train your own**:
-   - Download [DeepFashion2 dataset](https://github.com/switchablenorms/DeepFashion2)
-   - Train YOLOv8: `yolo train data=deepfashion2.yaml model=yolov8n.pt`
-   - Export to ONNX: `model.export(format='onnx')`
+**Clothing**:
+- Upper body: shirt, top, sweater, cardigan, jacket, vest, coat
+- Lower body: pants, shorts, skirt, tights
+- Full body: dress, jumpsuit, cape
 
-2. **Use pre-trained models**:
-   - Check [Ultralytics Hub](https://hub.ultralytics.com/)
-   - Check [HuggingFace](https://huggingface.co/models?search=fashion+yolo)
+**Accessories**:
+- Headwear: hat, headband
+- Eyewear: glasses
+- Footwear: shoe, sock
+- Other: tie, glove, watch, belt, bag, scarf, umbrella, leg warmer
 
-3. Place the model at `ADCommsPersonTracking.Api/models/fashion-yolo.onnx`
+#### Configuration
 
-4. Enable in configuration:
-   ```json
-   {
-     "ClothingDetection": {
-       "Enabled": true,
-       "ModelPath": "models/fashion-yolo.onnx",
-       "ConfidenceThreshold": 0.5
-     }
-   }
-   ```
+The model is enabled by default with optimized settings:
 
-**Supported Fashion Categories**:
-- Upper body: shirt, t-shirt, jacket, coat, sweater, hoodie, vest, blouse
-- Lower body: pants, jeans, shorts, skirt, leggings
-- Full body: dress
+```json
+{
+  "ClothingDetection": {
+    "Enabled": true,
+    "ModelPath": "models/fashion-yolo.onnx",
+    "ConfidenceThreshold": 0.3
+  }
+}
+```
+
+**Note**: The confidence threshold is set to 0.3 (lower than YOLO11's 0.45) because fashion detection is more challenging and requires a more sensitive threshold.
+
+#### Enhanced Color+Clothing Detection
+
+The system now analyzes colors **specifically on detected clothing regions**:
+
+1. YOLO11 detects persons
+2. Fashion model detects clothing items **with bounding boxes**
+3. Color analysis runs **on each clothing item's region**
+4. Queries like "blue jacket" will:
+   - Find "jacket" detections from fashion model
+   - Check if "blue" is present **on the jacket region specifically**
+   - Match only if both criteria are met
+
+This is much more accurate than analyzing colors on the entire person.
 
 ### 4. Build and Run
 

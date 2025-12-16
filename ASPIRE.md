@@ -74,11 +74,44 @@ The application uses two model export containers:
 
 #### Fashion Model Export Container
 - **Image**: `fashion-model-export` (custom built image)
-- **Purpose**: One-time export of fashion-trained YOLO model to ONNX format
+- **Purpose**: One-time export of Fashionpedia-trained YOLO model to ONNX format
 - **Operation**: Runs once, exports `fashion-yolo.onnx` to the shared `models/` directory, then exits
-- **Model**: Fashion-trained YOLO model for clothing detection (jacket, shirt, pants, dress, etc.)
+- **Model**: keremberke/yolov8m-fashion-detection from HuggingFace
+  - **Dataset**: Fashionpedia
+  - **Classes**: 27 fashion categories (shirt, jacket, pants, dress, hat, glasses, bag, etc.)
+  - **Size**: ~50 MB
+  - **Confidence Threshold**: 0.3 (optimized for fashion detection)
 
 The API service uses local ONNX Runtime for inference, loading both models from the shared volume.
+
+### Enhanced Color+Clothing Detection Flow
+
+The system implements an advanced pipeline for accurate color+clothing queries:
+
+1. **Person Detection** (YOLO11):
+   - Detects persons in the frame
+   - Also detects accessories (backpack, handbag, suitcase, etc.)
+
+2. **Clothing Detection** (Fashionpedia Model):
+   - Runs on cropped person image
+   - Detects clothing items **with bounding boxes**
+   - Returns 27 possible clothing/accessory categories
+
+3. **Color Analysis on Clothing Regions**:
+   - For each detected clothing item:
+     - Analyzes colors **specifically on that item's bounding box**
+     - Returns top 3 dominant colors
+   - Creates `ClothingWithColors` objects linking each item to its colors
+
+4. **Intelligent Matching**:
+   - For queries like "blue jacket":
+     - Checks if "jacket" was detected by fashion model
+     - Checks if "blue" is in the jacket's color list
+     - Matches only if **both** criteria are met on the same item
+   - For queries with just color OR just clothing, uses original matching logic
+   - For accessory queries (backpack, handbag), uses YOLO11 detections
+
+This approach is much more accurate than analyzing colors on the entire person, especially for queries combining color and clothing type.
 
 ## Running the Application
 
