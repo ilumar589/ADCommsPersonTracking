@@ -149,6 +149,10 @@ docker --version
 # Build the YOLO model export Docker image
 cd docker/yolo-model-export
 docker build -t yolo-model-export .
+
+# Build the fashion model export Docker image
+cd ../fashion-model-export
+docker build -t fashion-model-export .
 cd ../..
 
 # Set the AppHost as the startup project and run
@@ -161,13 +165,13 @@ This will:
 - Launch the API service with health checks and telemetry
 - Launch the Blazor Web UI
 - Start the YOLO11 model export container (one-time export to ONNX format)
+- Start the fashion model export container (one-time export to ONNX format)
 - Configure automatic service discovery between components
 
-The model export container will:
-- Download the YOLO11m model if not already present
-- Export it to ONNX format
-- Save it to the `models/` directory (shared via bind mount)
-- Exit after completion
+The model export containers will:
+- **YOLO11 model export**: Download the YOLO11x model if not already present, export it to ONNX format, save to `models/yolo11x.onnx`, then exit
+- **Fashion model export**: Download a placeholder YOLOv8n model, export it to ONNX format, save to `models/fashion-yolo.onnx`, then exit
+  - **Note**: The placeholder fashion model will NOT detect clothing correctly. For production use, you need a fashion-trained YOLO model (see section 3 above)
 
 Access the services:
 - **Aspire Dashboard**: `http://localhost:15000` or `https://localhost:17000` (for monitoring all services)
@@ -209,9 +213,9 @@ dotnet test --filter "Category=Integration"
 dotnet test
 ```
 
-## YOLO11 Model Export Docker Image
+## Model Export Docker Images
 
-When running the application with .NET Aspire, the YOLO11 model needs to be exported to ONNX format. This section provides detailed instructions for building and running the Docker image that handles this export process.
+When running the application with .NET Aspire, both the YOLO11 model and fashion model need to be exported to ONNX format. This section provides detailed instructions for building and running the Docker images that handle these export processes.
 
 ### Prerequisites
 
@@ -219,9 +223,9 @@ When running the application with .NET Aspire, the YOLO11 model needs to be expo
   - Download from: https://www.docker.com/products/docker-desktop/
   - Verify installation: `docker --version`
 
-### Building and Running the Docker Image
+### Building and Running the Docker Images
 
-Follow these steps to build the Docker image and export the YOLO11 model:
+Follow these steps to build the Docker images and export both models:
 
 #### 1. Navigate to the Docker Directory
 
@@ -229,7 +233,7 @@ Follow these steps to build the Docker image and export the YOLO11 model:
 cd docker/yolo-model-export
 ```
 
-#### 2. Build the Docker Image
+#### 2. Build the YOLO11 Model Export Docker Image
 
 ```bash
 docker build -t yolo-model-export:latest .
@@ -237,19 +241,32 @@ docker build -t yolo-model-export:latest .
 
 This creates a Docker image named `yolo-model-export:latest` that contains the YOLO11 export script.
 
+#### 2b. Build the Fashion Model Export Docker Image
+
+```bash
+cd ../fashion-model-export
+docker build -t fashion-model-export:latest .
+cd ..
+```
+
+This creates a Docker image named `fashion-model-export:latest` that contains the fashion model export script.
+
 #### 3. Create the Models Directory
 
 ```bash
-mkdir -p ../../models
+mkdir -p ../models
+cd yolo-model-export
 ```
 
-This creates the `models/` directory in the repository root where the exported model will be saved.
+This creates the `models/` directory in the repository root where the exported models will be saved.
 
-#### 4. Run the Container to Export the Model
+#### 4. Run the Containers to Export the Models
 
-Run the appropriate command for your operating system to start the container with a volume mount.
+Run the appropriate commands for your operating system to start the containers with a volume mount.
 
-**Note:** These commands assume you are still in the `docker/yolo-model-export` directory from step 1. The relative paths `../../models` will mount the `models/` directory from the repository root.
+**Note:** These commands assume you are in the `docker/yolo-model-export` directory. The relative paths `../../models` will mount the `models/` directory from the repository root.
+
+##### Export YOLO11 Model
 
 **Linux/macOS:**
 ```bash
@@ -266,30 +283,60 @@ docker run --rm -v "${PWD}/../../models:/models" yolo-model-export:latest
 docker run --rm -v "%cd%/../../models:/models" yolo-model-export:latest
 ```
 
-#### 5. Verify the Model Was Created
+##### Export Fashion Model
 
 **Linux/macOS:**
 ```bash
-ls -la ../../models/yolo11x.onnx
+cd ../fashion-model-export
+docker run --rm -v "$(pwd)/../../models:/models" fashion-model-export:latest
+cd ..
 ```
 
 **Windows PowerShell:**
 ```powershell
-Get-ChildItem ../../models/yolo11x.onnx
+cd ../fashion-model-export
+docker run --rm -v "${PWD}/../../models:/models" fashion-model-export:latest
+cd ..
 ```
 
 **Windows Command Prompt:**
 ```cmd
-dir ..\..\models\yolo11x.onnx
+cd ..\fashion-model-export
+docker run --rm -v "%cd%/../../models:/models" fashion-model-export:latest
+cd ..
 ```
 
-You should see a file approximately 136MB in size.
+#### 5. Verify the Models Were Created
 
-### What the Container Does
+**Linux/macOS:**
+```bash
+ls -la ../models/yolo11x.onnx
+ls -la ../models/fashion-yolo.onnx
+```
+
+**Windows PowerShell:**
+```powershell
+Get-ChildItem ../models/yolo11x.onnx
+Get-ChildItem ../models/fashion-yolo.onnx
+```
+
+**Windows Command Prompt:**
+```cmd
+dir ..\models\yolo11x.onnx
+dir ..\models\fashion-yolo.onnx
+```
+
+You should see:
+- `yolo11x.onnx` - approximately 136MB
+- `fashion-yolo.onnx` - approximately 6MB (placeholder YOLOv8n)
+
+### What the Containers Do
+
+#### YOLO11 Model Export Container
 
 The `yolo-model-export` container performs the following operations:
 
-1. **Downloads YOLO11m Pre-trained Weights** (~50MB) from Ultralytics if not already present
+1. **Downloads YOLO11x Pre-trained Weights** (~136MB) from Ultralytics if not already present
 2. **Exports to ONNX Format** using the Ultralytics library with optimizations:
    - Simplified model structure
    - Fixed input size (640x640)
@@ -298,6 +345,22 @@ The `yolo-model-export` container performs the following operations:
 4. **Exits Automatically** - The container completes and exits after the export is finished
 
 The entire process typically takes 2-5 minutes on the first run when downloading weights from the internet.
+
+#### Fashion Model Export Container
+
+The `fashion-model-export` container performs the following operations:
+
+1. **Downloads YOLOv8n Pre-trained Weights** (~6MB) as a placeholder from Ultralytics if not already present
+2. **Exports to ONNX Format** using the Ultralytics library with the same optimizations as YOLO11
+3. **Saves to Models Directory** - The exported `fashion-yolo.onnx` file is saved to the `models/` directory through the volume mount
+4. **Exits Automatically** - The container completes and exits after the export is finished
+
+**Important Note**: The fashion model export script currently exports a placeholder YOLOv8n model that will **NOT** detect clothing items correctly. For production use, you need to:
+- Train a fashion-specific YOLO model on DeepFashion2 or similar datasets
+- Replace the placeholder model export with your trained model
+- The expected classes are: shirt, jacket, pants, dress, shorts, skirt, etc.
+
+See the "Get the Fashion Detection Model" section (section 3 above) for more details on obtaining a proper fashion model.
 
 ### Running with .NET Aspire
 
@@ -313,7 +376,9 @@ dotnet run
 
 .NET Aspire will:
 - Start the Aspire Dashboard (opens automatically in your browser)
-- Launch the API service with the YOLO11 model
+- Run the YOLO11 model export container (if model doesn't exist)
+- Run the fashion model export container (if model doesn't exist)
+- Launch the API service with both YOLO11 and fashion models
 - Launch the Blazor Web UI
 - Configure service discovery and health monitoring
 
@@ -323,18 +388,25 @@ Access the services:
 
 ### Troubleshooting
 
-#### "Unable to find image 'yolo-model-export:latest' locally"
+#### "Unable to find image 'yolo-model-export:latest' or 'fashion-model-export:latest' locally"
 
 **Error Message:**
 ```
 Unable to find image 'yolo-model-export:latest' locally
 Error response from daemon: pull access denied for yolo-model-export, repository does not exist or may require 'docker login'
 ```
+or
+```
+Unable to find image 'fashion-model-export:latest' locally
+Error response from daemon: pull access denied for fashion-model-export, repository does not exist or may require 'docker login'
+```
 
-**Solution:** The Docker image needs to be built locally first. Follow the build instructions above:
+**Solution:** The Docker images need to be built locally first. Follow the build instructions above:
 ```bash
 cd docker/yolo-model-export
 docker build -t yolo-model-export:latest .
+cd ../fashion-model-export
+docker build -t fashion-model-export:latest .
 ```
 
 #### "Permission denied" When Mounting Volumes
@@ -359,11 +431,15 @@ docker run --rm -v "/absolute/path/to/models:/models" yolo-model-export:latest
 
 **Issue:** The first run may take several minutes.
 
-**Explanation:** On the first run, the container downloads the YOLO11m pre-trained weights (~50MB) from the internet. Subsequent runs will be much faster if the model already exists.
+**Explanation:** On the first run, the containers download pre-trained weights from the internet:
+- YOLO11 model: ~136MB
+- Fashion model placeholder: ~6MB
+
+Subsequent runs will be much faster if the models already exist.
 
 **Solution:** 
 - Ensure you have a stable internet connection
-- Wait for the download to complete (typically 2-5 minutes)
+- Wait for the downloads to complete (typically 2-5 minutes for YOLO11, less than 1 minute for fashion model)
 - If the download fails, delete any partial files in the `models/` directory and try again
 
 #### Docker Daemon Not Running

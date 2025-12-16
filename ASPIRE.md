@@ -62,14 +62,23 @@ The ServiceDefaults project (`ADCommsPersonTracking.ServiceDefaults`) provides s
 - Enables automatic service endpoint resolution
 - Configures HTTP clients to use service discovery by default
 
-### YOLO Model Export Container
+### Model Export Containers
 
-The YOLO model export container configuration:
+The application uses two model export containers:
+
+#### YOLO11 Model Export Container
 - **Image**: `yolo-model-export` (custom built image)
 - **Purpose**: One-time export of YOLO11 model to ONNX format
-- **Operation**: Runs once, exports the model to the shared `models/` directory, then exits
+- **Operation**: Runs once, exports `yolo11x.onnx` to the shared `models/` directory, then exits
+- **Model**: YOLO11x trained on COCO dataset for person and accessory detection
 
-The API service uses local ONNX Runtime for inference, loading the model from the shared volume.
+#### Fashion Model Export Container
+- **Image**: `fashion-model-export` (custom built image)
+- **Purpose**: One-time export of fashion-trained YOLO model to ONNX format
+- **Operation**: Runs once, exports `fashion-yolo.onnx` to the shared `models/` directory, then exits
+- **Model**: Fashion-trained YOLO model for clothing detection (jacket, shirt, pants, dress, etc.)
+
+The API service uses local ONNX Runtime for inference, loading both models from the shared volume.
 
 ## Running the Application
 
@@ -99,14 +108,16 @@ The API service uses local ONNX Runtime for inference, loading the model from th
    - **Aspire Dashboard**: Opens automatically in your browser (usually `http://localhost:15000`)
    - **API Service**: Check the dashboard for the assigned endpoint
    - **Web UI**: Check the dashboard for the assigned endpoint
-   - **YOLO11 Container**: Check the dashboard for the container status
+   - **Model Export Containers**: Check the dashboard for the container status (YOLO11 and fashion model)
 
 ### What Happens When You Run
 
 1. **Aspire Dashboard starts**: A web-based dashboard for monitoring all services
 2. **Infrastructure services launch**: Redis cache and Azure Storage emulator (Azurite) start
-3. **YOLO model export container**: Runs once to export the YOLO11 model to ONNX format, then exits
-4. **API service starts**: The ASP.NET Core API with health checks and telemetry, using local ONNX inference
+3. **Model export containers run**: 
+   - **YOLO model export container**: Exports the YOLO11x model to ONNX format, then exits
+   - **Fashion model export container**: Exports the fashion-trained YOLO model to ONNX format, then exits
+4. **API service starts**: The ASP.NET Core API with health checks and telemetry, using local ONNX inference for both models
 5. **Web UI starts**: The Blazor Web App with Interactive Server rendering
 6. **Service discovery configures endpoints**: All services can communicate via named endpoints
 
@@ -142,14 +153,34 @@ The Aspire Dashboard provides:
 
 ## Service Communication
 
-### API → ONNX Model
+### API → ONNX Models
 
-The API service receives the model path via environment variable:
+The API service receives model paths via environment variables:
+
+#### YOLO11 Model (Person Detection)
 ```
 ObjectDetection__ModelPath = /path/to/models/yolo11x.onnx
 ```
 
-The API loads the ONNX model and performs local inference using ONNX Runtime.
+The API loads the YOLO11 ONNX model and performs local inference using ONNX Runtime for person detection and limited accessory detection (backpack, handbag, suitcase, tie).
+
+#### Fashion Model (Clothing Detection)
+```
+ClothingDetection__Enabled = true
+ClothingDetection__ModelPath = /path/to/models/fashion-yolo.onnx
+ClothingDetection__ConfidenceThreshold = 0.5
+```
+
+The API also loads an optional fashion-trained YOLO model for detecting specific clothing items (jacket, shirt, pants, dress, etc.). This model runs inference on cropped person images for accurate clothing classification.
+
+**How Both Models Work Together:**
+- **YOLO11 model** (`ObjectDetectionService`) detects persons and limited accessories (backpack, handbag, suitcase, tie)
+- **Fashion model** (`ClothingDetectionService`) detects specific clothing items on cropped person regions
+- **AccessoryDetectionService** combines results from both models to match search criteria
+- When searching for criteria like "person with blue jacket", both models contribute to finding matches:
+  - YOLO11 finds the person bounding box
+  - Fashion model identifies the jacket on that person
+  - Color analysis determines if the jacket is blue
 
 ### Web UI → API
 
@@ -184,15 +215,36 @@ Key extension methods:
 
 ## Troubleshooting
 
-### Model Export Container Not Starting
+### Model Export Containers Not Starting
 
-**Problem**: YOLO model export container fails to start or complete
+**Problem**: YOLO or fashion model export containers fail to start or complete
 
 **Solutions**:
 1. Ensure Docker Desktop is running
-2. Build the export image: `cd docker/yolo-model-export && docker build -t yolo-model-export .`
+2. Build the export images:
+   ```bash
+   cd docker/yolo-model-export
+   docker build -t yolo-model-export .
+   cd ../fashion-model-export
+   docker build -t fashion-model-export .
+   ```
 3. Check Aspire Dashboard logs for error messages
 4. Verify the `models/` directory is created and accessible
+
+### Fashion Model Not Working
+
+**Problem**: Clothing detection is not working or returns empty results
+
+**Solutions**:
+1. Check that the fashion model container has run and exported the model:
+   - Look in `models/fashion-yolo.onnx` to verify the file exists
+   - Check the Aspire Dashboard logs for the fashion-model-export container
+2. Verify the environment variables are set in the Aspire Dashboard:
+   - `ClothingDetection__Enabled` should be `true`
+   - `ClothingDetection__ModelPath` should point to the fashion model
+   - `ClothingDetection__ConfidenceThreshold` should be set (default: `0.5`)
+3. Check the API logs for clothing detection initialization messages
+4. Note: The placeholder fashion model (YOLOv8n) will NOT detect clothing correctly. For production use, you need a fashion-trained YOLO model trained on DeepFashion2 or similar datasets.
 
 ### Service Discovery Not Working
 
