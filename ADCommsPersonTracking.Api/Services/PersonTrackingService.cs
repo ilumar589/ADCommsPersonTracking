@@ -281,7 +281,8 @@ public class PersonTrackingService : IPersonTrackingService
                                 personDiagnostics.AccessoryMatching = accessoryDiagnostics;
                             }
 
-                            // Detect accessories using YOLO-detected accessories if available
+                            // PRESERVE EXISTING ACCESSORY DETECTION FROM YOLO11
+                            // Detect accessories (backpack, handbag, etc.) using YOLO-detected accessories if available
                             AccessoryDetectionResult accessoryResult;
                             if (allAccessories.Count > 0)
                             {
@@ -292,22 +293,70 @@ public class PersonTrackingService : IPersonTrackingService
                                 accessoryResult = await _accessoryDetectionService.DetectAccessoriesAsync(imageBytes, detection);
                             }
 
-                            // Detect clothing items using fashion model on cropped person image
-                            var clothingItems = await DetectClothingOnPersonAsync(imageBytes, detection);
+                            // NEW ENHANCED FLOW: Detect clothing items WITH colors using fashion model
+                            var clothingWithColors = await DetectClothingWithColorsOnPersonAsync(imageBytes, detection);
                             
-                            // Merge clothing detections into accessory result
-                            if (clothingItems.Count > 0)
+                            // For backward compatibility, also add clothing items to accessory result (without colors)
+                            // This preserves the old flow where clothing items were part of accessory result
+                            if (clothingWithColors.Count > 0)
                             {
-                                accessoryResult.ClothingItems.AddRange(clothingItems);
+                                foreach (var cwc in clothingWithColors)
+                                {
+                                    accessoryResult.ClothingItems.Add(new DetectedItem(cwc.ClothingItem.Label, cwc.ClothingItem.Confidence));
+                                }
                                 _logger.LogInformation("Detected {ClothingCount} clothing items via fashion model for person {PersonIndex}", 
-                                    clothingItems.Count, idx);
+                                    clothingWithColors.Count, idx);
                             }
 
                             // Check if person matches ALL criteria
-                            var matchesColors = !hasCriteria || searchCriteria.Colors.Count == 0 || 
+                            // For color matching, we now have two modes:
+                            // 1. If searching for BOTH color AND clothing (e.g., "blue jacket"), use enhanced color-on-clothing matching
+                            // 2. If searching for just color OR just clothing, use original matching logic
+                            
+                            bool matchesColors;
+                            bool matchesAccessories;
+                            
+                            // Determine if we're searching for color+clothing combination
+                            bool hasColorClothingQuery = searchCriteria.Colors.Count > 0 && searchCriteria.ClothingItems.Count > 0;
+                            
+                            if (hasColorClothingQuery)
+                            {
+                                // Enhanced matching: check if any clothing item matches the color+clothing combination
+                                bool foundColorClothingMatch = false;
+                                
+                                foreach (var searchColor in searchCriteria.Colors)
+                                {
+                                    foreach (var searchClothing in searchCriteria.ClothingItems)
+                                    {
+                                        if (_colorAnalysisService.MatchesColoredClothingCriteria(clothingWithColors, searchColor, searchClothing))
+                                        {
+                                            foundColorClothingMatch = true;
+                                            _logger.LogDebug("Found match for '{Color} {Clothing}' query", searchColor, searchClothing);
+                                            break;
+                                        }
+                                    }
+                                    if (foundColorClothingMatch) break;
+                                }
+                                
+                                matchesColors = foundColorClothingMatch;
+                                matchesAccessories = true; // Already matched via color+clothing
+                                
+                                // Also check for accessories (backpack, handbag, etc.) separately
+                                if (searchCriteria.Accessories.Count > 0)
+                                {
+                                    matchesAccessories = matchesAccessories && 
+                                        _accessoryDetectionService.MatchesCriteria(accessoryResult, new List<string>(), searchCriteria.Accessories);
+                                }
+                            }
+                            else
+                            {
+                                // Original matching logic for backward compatibility
+                                matchesColors = !hasCriteria || searchCriteria.Colors.Count == 0 || 
                                               _colorAnalysisService.MatchesColorCriteria(colorProfile, searchCriteria.Colors);
-                            var matchesAccessories = searchCriteria.ClothingItems.Count == 0 && searchCriteria.Accessories.Count == 0 ||
+                                matchesAccessories = searchCriteria.ClothingItems.Count == 0 && searchCriteria.Accessories.Count == 0 ||
                                                     _accessoryDetectionService.MatchesCriteria(accessoryResult, searchCriteria.ClothingItems, searchCriteria.Accessories);
+                            }
+                            
                             var matchesPhysical = (searchCriteria.PhysicalAttributes.Count == 0 && searchCriteria.Height == null) ||
                                                  _physicalAttributeEstimator.MatchesCriteria(physicalAttributes, searchCriteria.PhysicalAttributes, searchCriteria.Height);
 
@@ -692,9 +741,14 @@ public class PersonTrackingService : IPersonTrackingService
     }
 
     /// <summary>
-    /// Crop person from image and detect clothing items using fashion model.
+    /// Detect clothing items WITH colors on a person.
+    /// This is the new enhanced flow:
+    /// 1. Crop person region from image
+    /// 2. Run fashion model to detect clothing items WITH bounding boxes
+    /// 3. For each clothing item, analyze colors on its specific region
+    /// 4. Return ClothingWithColors objects
     /// </summary>
-    private async Task<List<DetectedItem>> DetectClothingOnPersonAsync(byte[] imageBytes, BoundingBox personBox)
+    private async Task<List<ClothingWithColors>> DetectClothingWithColorsOnPersonAsync(byte[] imageBytes, BoundingBox personBox)
     {
         try
         {
@@ -703,31 +757,60 @@ public class PersonTrackingService : IPersonTrackingService
             using var image = await SixLabors.ImageSharp.Image.LoadAsync<SixLabors.ImageSharp.PixelFormats.Rgb24>(memoryStream);
             
             // Ensure bounding box is within image bounds
-            var x = Math.Max(0, (int)personBox.X);
-            var y = Math.Max(0, (int)personBox.Y);
-            var width = Math.Min((int)personBox.Width, image.Width - x);
-            var height = Math.Min((int)personBox.Height, image.Height - y);
+            var personX = Math.Max(0, (int)personBox.X);
+            var personY = Math.Max(0, (int)personBox.Y);
+            var personWidth = Math.Min((int)personBox.Width, image.Width - personX);
+            var personHeight = Math.Min((int)personBox.Height, image.Height - personY);
 
-            if (width <= 0 || height <= 0)
+            if (personWidth <= 0 || personHeight <= 0)
             {
-                return new List<DetectedItem>();
+                return new List<ClothingWithColors>();
             }
 
             // Crop the person region
-            image.Mutate(ctx => ctx.Crop(new SixLabors.ImageSharp.Rectangle(x, y, width, height)));
+            var croppedPerson = image.Clone(ctx => ctx.Crop(new SixLabors.ImageSharp.Rectangle(personX, personY, personWidth, personHeight)));
 
-            // Convert cropped image to bytes
+            // Convert cropped person to bytes for fashion model
             using var croppedStream = new MemoryStream();
-            await image.SaveAsync(croppedStream, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+            await croppedPerson.SaveAsync(croppedStream, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
             var croppedBytes = croppedStream.ToArray();
 
-            // Run clothing detection on cropped image
-            return await _clothingDetectionService.DetectClothingAsync(croppedBytes);
+            // Run fashion model to detect clothing items WITH bounding boxes
+            var clothingItems = await _clothingDetectionService.DetectClothingAsync(croppedBytes);
+            
+            if (clothingItems.Count == 0)
+            {
+                return new List<ClothingWithColors>();
+            }
+
+            _logger.LogDebug("Fashion model detected {Count} clothing items on person", clothingItems.Count);
+
+            // For each detected clothing item, analyze colors on its specific region
+            var clothingWithColorsList = new List<ClothingWithColors>();
+
+            foreach (var clothingItem in clothingItems)
+            {
+                // The clothing item's bounding box is relative to the cropped person image
+                // We need to analyze colors on this specific region within the cropped person
+                var colors = await _colorAnalysisService.AnalyzeClothingRegionColorsAsync(croppedBytes, clothingItem.BoundingBox);
+
+                clothingWithColorsList.Add(new ClothingWithColors
+                {
+                    ClothingItem = clothingItem,
+                    Colors = colors
+                });
+
+                _logger.LogDebug("Clothing item '{Label}' has colors: {Colors}",
+                    clothingItem.Label,
+                    string.Join(", ", colors.Select(c => c.ColorName)));
+            }
+
+            return clothingWithColorsList;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error detecting clothing on person");
-            return new List<DetectedItem>();
+            _logger.LogError(ex, "Error detecting clothing with colors on person");
+            return new List<ClothingWithColors>();
         }
     }
 }

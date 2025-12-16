@@ -24,44 +24,69 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
     private const int InputHeight = 640;
     private const float IouThreshold = 0.5f;
     
-    // Fashion model class names based on DeepFashion2/FashionPedia categories
-    // These should match the classes in the trained fashion YOLO model
+    // Fashionpedia class names from keremberke/yolov8m-fashion-detection model
+    // This model is trained on Fashionpedia dataset with 27 clothing categories
     private static readonly Dictionary<int, string> FashionClassNames = new()
     {
-        // Upper body clothing
-        { 0, "short_sleeve_top" },
-        { 1, "long_sleeve_top" },
-        { 2, "short_sleeve_outwear" },
-        { 3, "long_sleeve_outwear" },
-        { 4, "vest" },
-        { 5, "sling" },
-        // Lower body clothing
-        { 6, "shorts" },
-        { 7, "trousers" },
+        { 0, "shirt" },
+        { 1, "top" },
+        { 2, "sweater" },
+        { 3, "cardigan" },
+        { 4, "jacket" },
+        { 5, "vest" },
+        { 6, "pants" },
+        { 7, "shorts" },
         { 8, "skirt" },
-        // Full body
-        { 9, "short_sleeve_dress" },
-        { 10, "long_sleeve_dress" },
-        { 11, "vest_dress" },
-        { 12, "sling_dress" }
+        { 9, "coat" },
+        { 10, "dress" },
+        { 11, "jumpsuit" },
+        { 12, "cape" },
+        { 13, "glasses" },
+        { 14, "hat" },
+        { 15, "headband" },
+        { 16, "tie" },
+        { 17, "glove" },
+        { 18, "watch" },
+        { 19, "belt" },
+        { 20, "leg warmer" },
+        { 21, "tights" },
+        { 22, "sock" },
+        { 23, "shoe" },
+        { 24, "bag" },
+        { 25, "scarf" },
+        { 26, "umbrella" }
     };
 
     // Map fashion model classes to common names for matching
     private static readonly Dictionary<string, List<string>> ClassNameMapping = new()
     {
-        { "short_sleeve_top", new() { "shirt", "t-shirt", "tshirt", "top", "blouse" } },
-        { "long_sleeve_top", new() { "shirt", "top", "blouse", "sweater" } },
-        { "short_sleeve_outwear", new() { "jacket", "coat", "outwear", "blazer", "vest" } },
-        { "long_sleeve_outwear", new() { "jacket", "coat", "outwear", "blazer", "cardigan", "hoodie", "sweater" } },
-        { "vest", new() { "vest", "gilet" } },
-        { "sling", new() { "tank top", "camisole", "top" } },
+        { "shirt", new() { "shirt", "t-shirt", "tshirt", "blouse" } },
+        { "top", new() { "top", "blouse", "tank top" } },
+        { "sweater", new() { "sweater", "pullover", "jumper" } },
+        { "cardigan", new() { "cardigan", "sweater" } },
+        { "jacket", new() { "jacket", "blazer", "coat" } },
+        { "vest", new() { "vest", "gilet", "waistcoat" } },
+        { "pants", new() { "pants", "trousers", "jeans", "slacks" } },
         { "shorts", new() { "shorts" } },
-        { "trousers", new() { "pants", "trousers", "jeans", "slacks", "leggings" } },
         { "skirt", new() { "skirt" } },
-        { "short_sleeve_dress", new() { "dress" } },
-        { "long_sleeve_dress", new() { "dress" } },
-        { "vest_dress", new() { "dress" } },
-        { "sling_dress", new() { "dress" } }
+        { "coat", new() { "coat", "jacket", "overcoat" } },
+        { "dress", new() { "dress", "gown" } },
+        { "jumpsuit", new() { "jumpsuit", "overalls", "romper" } },
+        { "cape", new() { "cape", "cloak", "poncho" } },
+        { "glasses", new() { "glasses", "sunglasses", "eyeglasses" } },
+        { "hat", new() { "hat", "cap", "beanie" } },
+        { "headband", new() { "headband", "hairband" } },
+        { "tie", new() { "tie", "necktie", "bowtie" } },
+        { "glove", new() { "glove", "gloves" } },
+        { "watch", new() { "watch", "wristwatch" } },
+        { "belt", new() { "belt" } },
+        { "leg warmer", new() { "leg warmer", "legwarmer" } },
+        { "tights", new() { "tights", "leggings", "pantyhose" } },
+        { "sock", new() { "sock", "socks" } },
+        { "shoe", new() { "shoe", "shoes", "sneaker", "boot" } },
+        { "bag", new() { "bag", "purse", "handbag" } },
+        { "scarf", new() { "scarf" } },
+        { "umbrella", new() { "umbrella" } }
     };
 
     public ClothingDetectionService(
@@ -111,12 +136,12 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
         }
     }
 
-    public async Task<List<DetectedItem>> DetectClothingAsync(byte[] imageBytes, float? confidenceThreshold = null)
+    public async Task<List<DetectedClothingItem>> DetectClothingAsync(byte[] imageBytes, float? confidenceThreshold = null)
     {
         if (!_enabled || _session == null)
         {
             // Return empty list if service is not enabled or model not loaded
-            return new List<DetectedItem>();
+            return new List<DetectedClothingItem>();
         }
 
         var threshold = confidenceThreshold ?? _confidenceThreshold;
@@ -152,8 +177,8 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
             using var results = _session.Run(inputs);
             var output = results.First().AsTensor<float>();
 
-            // Parse YOLO output and extract clothing items
-            var detections = ParseYoloOutput(output, threshold);
+            // Parse YOLO output and extract clothing items with bounding boxes
+            var detections = ParseYoloOutput(output, threshold, originalWidth, originalHeight);
             
             _logger.LogInformation("Detected {ClothingCount} clothing items", detections.Count);
             return detections;
@@ -161,29 +186,46 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error detecting clothing items");
-            return new List<DetectedItem>();
+            return new List<DetectedClothingItem>();
         }
     }
 
-    private List<DetectedItem> ParseYoloOutput(Tensor<float> output, float confidenceThreshold)
+    private List<DetectedClothingItem> ParseYoloOutput(Tensor<float> output, float confidenceThreshold, int originalWidth, int originalHeight)
     {
-        var detections = new List<DetectedItem>();
+        var detections = new List<DetectedClothingItem>();
         var dims = output.Dimensions.ToArray();
         
-        // YOLO output format: [batch, classes + 4, num_detections]
+        _logger.LogDebug("YOLO output dimensions: [{Dims}]", string.Join(", ", dims));
+        
+        // Detect model type based on output dimensions
+        // YOLOv8/YOLOv11 format: [batch, classes + 4, num_detections]
         // where the first 4 values are bbox coordinates (cx, cy, w, h)
         // and the remaining values are class probabilities
         
         int numClasses = FashionClassNames.Count;
         int numDetections = dims.Length > 2 ? dims[2] : 8400;
+        int outputChannels = dims.Length > 1 ? dims[1] : (4 + numClasses);
+        
+        _logger.LogDebug("Parsing fashion model output: {NumDetections} detections, {NumClasses} classes, {OutputChannels} output channels", 
+            numDetections, numClasses, outputChannels);
+        
+        // Calculate scale factors for bounding box conversion
+        float scaleX = (float)originalWidth / InputWidth;
+        float scaleY = (float)originalHeight / InputHeight;
         
         for (int i = 0; i < numDetections; i++)
         {
+            // Get bounding box coordinates (cx, cy, w, h)
+            float cx = output[0, 0, i];
+            float cy = output[0, 1, i];
+            float w = output[0, 2, i];
+            float h = output[0, 3, i];
+            
             // Get class scores (skip first 4 bbox coordinates)
             float maxScore = 0;
             int maxClass = 0;
             
-            for (int c = 0; c < numClasses; c++)
+            for (int c = 0; c < numClasses && (4 + c) < outputChannels; c++)
             {
                 var score = output[0, 4 + c, i];
                 if (score > maxScore)
@@ -192,41 +234,114 @@ public class ClothingDetectionService : IClothingDetectionService, IDisposable
                     maxClass = c;
                 }
             }
+            
+            // Log raw scores before threshold filtering for diagnostics
+            if (maxScore > 0.01f) // Only log scores above 1% to reduce noise
+            {
+                var className = FashionClassNames.TryGetValue(maxClass, out var cn) ? cn : $"class_{maxClass}";
+                _logger.LogDebug("Detection {Index}: class={ClassName}, score={Score:F3}, bbox=[{Cx:F1}, {Cy:F1}, {W:F1}, {H:F1}]",
+                    i, className, maxScore, cx, cy, w, h);
+            }
 
             // Check if detection meets confidence threshold
-            if (maxScore >= confidenceThreshold && FashionClassNames.TryGetValue(maxClass, out var className))
+            if (maxScore >= confidenceThreshold && FashionClassNames.TryGetValue(maxClass, out var detectedClassName))
             {
                 // Convert fashion class to common names for matching
-                var commonNames = ClassNameMapping.TryGetValue(className, out var names) ? names : new List<string> { className };
+                var commonNames = ClassNameMapping.TryGetValue(detectedClassName, out var names) ? names : new List<string> { detectedClassName };
                 
                 // Use the first common name as the primary label
-                var label = commonNames.FirstOrDefault() ?? className;
+                var label = commonNames.FirstOrDefault() ?? detectedClassName;
                 
-                detections.Add(new DetectedItem(label, maxScore));
+                // Convert center coordinates to top-left coordinates and scale to original image size
+                float x = (cx - w / 2) * scaleX;
+                float y = (cy - h / 2) * scaleY;
+                float width = w * scaleX;
+                float height = h * scaleY;
                 
-                _logger.LogDebug("Detected {ClassName} ({Label}) with confidence {Confidence:F3}", 
-                    className, label, maxScore);
+                // Ensure bounding box is within image bounds
+                x = Math.Max(0, x);
+                y = Math.Max(0, y);
+                width = Math.Min(width, originalWidth - x);
+                height = Math.Min(height, originalHeight - y);
+                
+                var boundingBox = new BoundingBox
+                {
+                    X = x,
+                    Y = y,
+                    Width = width,
+                    Height = height,
+                    Confidence = maxScore,
+                    Label = label
+                };
+                
+                detections.Add(new DetectedClothingItem(label, maxScore, boundingBox));
+                
+                _logger.LogDebug("Detected {ClassName} ({Label}) with confidence {Confidence:F3} at [{X:F1}, {Y:F1}, {W:F1}, {H:F1}]", 
+                    detectedClassName, label, maxScore, x, y, width, height);
             }
         }
+
+        _logger.LogInformation("Fashion model found {Count} detections above threshold {Threshold:F2}", 
+            detections.Count, confidenceThreshold);
 
         // Apply Non-Maximum Suppression to remove duplicate detections
         return ApplyNMS(detections);
     }
 
-    private List<DetectedItem> ApplyNMS(List<DetectedItem> items)
+    private List<DetectedClothingItem> ApplyNMS(List<DetectedClothingItem> items)
     {
-        // Group similar items and keep the one with highest confidence
-        var result = new List<DetectedItem>();
-        var grouped = items.GroupBy(i => i.Label.ToLowerInvariant());
-        
-        foreach (var group in grouped)
+        if (items.Count == 0)
+            return items;
+
+        var result = new List<DetectedClothingItem>();
+        var sorted = items.OrderByDescending(i => i.Confidence).ToList();
+
+        foreach (var item in sorted)
         {
-            // Keep the detection with highest confidence for each label
-            var best = group.OrderByDescending(i => i.Confidence).First();
-            result.Add(best);
+            bool shouldAdd = true;
+
+            // Check if this item overlaps significantly with any already selected item
+            foreach (var selected in result)
+            {
+                // Calculate IoU (Intersection over Union)
+                float iou = CalculateIoU(item.BoundingBox, selected.BoundingBox);
+
+                // If IoU is high and it's the same type of clothing, skip this detection
+                if (iou > IouThreshold && item.Label.Equals(selected.Label, StringComparison.OrdinalIgnoreCase))
+                {
+                    shouldAdd = false;
+                    break;
+                }
+            }
+
+            if (shouldAdd)
+            {
+                result.Add(item);
+            }
         }
-        
+
         return result;
+    }
+
+    private float CalculateIoU(BoundingBox box1, BoundingBox box2)
+    {
+        // Calculate intersection
+        float x1 = Math.Max(box1.X, box2.X);
+        float y1 = Math.Max(box1.Y, box2.Y);
+        float x2 = Math.Min(box1.X + box1.Width, box2.X + box2.Width);
+        float y2 = Math.Min(box1.Y + box1.Height, box2.Y + box2.Height);
+
+        float intersectionWidth = Math.Max(0, x2 - x1);
+        float intersectionHeight = Math.Max(0, y2 - y1);
+        float intersectionArea = intersectionWidth * intersectionHeight;
+
+        // Calculate union
+        float box1Area = box1.Width * box1.Height;
+        float box2Area = box2.Width * box2.Height;
+        float unionArea = box1Area + box2Area - intersectionArea;
+
+        // Calculate IoU
+        return unionArea > 0 ? intersectionArea / unionArea : 0;
     }
 
     public void Dispose()

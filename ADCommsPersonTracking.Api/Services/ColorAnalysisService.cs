@@ -201,4 +201,81 @@ public class ColorAnalysisService : IColorAnalysisService
     {
         return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
+
+    public async Task<List<DetectedColor>> AnalyzeClothingRegionColorsAsync(byte[] imageBytes, BoundingBox clothingBox)
+    {
+        try
+        {
+            using var memoryStream = new MemoryStream(imageBytes);
+            using var image = await Image.LoadAsync<Rgb24>(memoryStream);
+            
+            // Ensure bounding box is within image bounds
+            var x = Math.Max(0, (int)clothingBox.X);
+            var y = Math.Max(0, (int)clothingBox.Y);
+            var width = Math.Min((int)clothingBox.Width, image.Width - x);
+            var height = Math.Min((int)clothingBox.Height, image.Height - y);
+
+            if (width <= 0 || height <= 0)
+            {
+                _logger.LogInvalidBoundingBox();
+                return new List<DetectedColor>();
+            }
+
+            // Crop to clothing region
+            var clothingRegion = image.Clone(ctx => ctx.Crop(new Rectangle(x, y, width, height)));
+
+            // Analyze colors on this specific clothing region (return top 3 colors)
+            var colors = await AnalyzeRegionAsync(clothingRegion, 0, 0, width, height, 3);
+            
+            _logger.LogDebug("Analyzed clothing region colors: {Colors}", 
+                string.Join(", ", colors.Select(c => $"{c.ColorName}({c.Confidence:F2})")));
+            
+            return colors;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogColorAnalysisError(ex);
+            return new List<DetectedColor>();
+        }
+    }
+
+    public bool MatchesColoredClothingCriteria(List<ClothingWithColors> detectedClothing, string searchColor, string searchClothingType)
+    {
+        if (detectedClothing == null || detectedClothing.Count == 0)
+        {
+            return false;
+        }
+
+        // Normalize search terms
+        var normalizedSearchColor = searchColor.ToLowerInvariant().Trim();
+        var normalizedSearchClothing = searchClothingType.ToLowerInvariant().Trim();
+
+        // Check each detected clothing item
+        foreach (var clothingWithColor in detectedClothing)
+        {
+            var clothingLabel = clothingWithColor.ClothingItem.Label.ToLowerInvariant();
+            
+            // Check if clothing type matches (exact or contains)
+            bool clothingMatches = clothingLabel.Contains(normalizedSearchClothing) || 
+                                  normalizedSearchClothing.Contains(clothingLabel);
+
+            if (!clothingMatches)
+                continue;
+
+            // Check if any of the detected colors on this clothing item match the search color
+            var detectedColorNames = clothingWithColor.Colors
+                .Select(c => c.ColorName.ToLowerInvariant())
+                .ToHashSet();
+
+            if (detectedColorNames.Contains(normalizedSearchColor))
+            {
+                _logger.LogDebug("Match found: {SearchColor} {SearchClothing} - detected {Label} with colors [{Colors}]",
+                    searchColor, searchClothingType, clothingWithColor.ClothingItem.Label,
+                    string.Join(", ", detectedColorNames));
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
