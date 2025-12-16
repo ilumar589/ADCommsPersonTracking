@@ -75,7 +75,7 @@ public class PersonTrackingServiceTests
 
         _clothingDetectionServiceMock
             .Setup(s => s.DetectClothingAsync(It.IsAny<byte[]>(), It.IsAny<float?>()))
-            .ReturnsAsync(new List<DetectedItem>());
+            .ReturnsAsync(new List<DetectedClothingItem>());
 
         _physicalAttributeEstimatorMock
             .Setup(s => s.EstimateAttributesAsync(It.IsAny<byte[]>(), It.IsAny<BoundingBox>(), It.IsAny<int>(), It.IsAny<int>()))

@@ -310,16 +310,18 @@ public class PersonTrackingService : IPersonTrackingService
 
                             // Check if person matches ALL criteria
                             // For color matching, we now have two modes:
-                            // 1. If searching for BOTH color AND clothing (e.g., "blue jacket"), use enhanced color-on-clothing matching
-                            // 2. If searching for just color OR just clothing, use original matching logic
+                            // 1. If searching for BOTH color AND clothing (e.g., "blue jacket") AND fashion model returned results,
+                            //    use enhanced color-on-clothing matching
+                            // 2. Otherwise, use original matching logic for backward compatibility
                             
                             bool matchesColors;
                             bool matchesAccessories;
                             
-                            // Determine if we're searching for color+clothing combination
+                            // Determine if we should use enhanced color+clothing matching
                             bool hasColorClothingQuery = searchCriteria.Colors.Count > 0 && searchCriteria.ClothingItems.Count > 0;
+                            bool canUseEnhancedMatching = hasColorClothingQuery && clothingWithColors.Count > 0;
                             
-                            if (hasColorClothingQuery)
+                            if (canUseEnhancedMatching)
                             {
                                 // Enhanced matching: check if any clothing item matches the color+clothing combination
                                 bool foundColorClothingMatch = false;
@@ -331,7 +333,7 @@ public class PersonTrackingService : IPersonTrackingService
                                         if (_colorAnalysisService.MatchesColoredClothingCriteria(clothingWithColors, searchColor, searchClothing))
                                         {
                                             foundColorClothingMatch = true;
-                                            _logger.LogDebug("Found match for '{Color} {Clothing}' query", searchColor, searchClothing);
+                                            _logger.LogDebug("Found match for '{Color} {Clothing}' query via enhanced matching", searchColor, searchClothing);
                                             break;
                                         }
                                     }
@@ -351,6 +353,9 @@ public class PersonTrackingService : IPersonTrackingService
                             else
                             {
                                 // Original matching logic for backward compatibility
+                                // This is used when:
+                                // - No color+clothing query, OR
+                                // - Fashion model didn't return any detections (disabled or no matches)
                                 matchesColors = !hasCriteria || searchCriteria.Colors.Count == 0 || 
                                               _colorAnalysisService.MatchesColorCriteria(colorProfile, searchCriteria.Colors);
                                 matchesAccessories = searchCriteria.ClothingItems.Count == 0 && searchCriteria.Accessories.Count == 0 ||
