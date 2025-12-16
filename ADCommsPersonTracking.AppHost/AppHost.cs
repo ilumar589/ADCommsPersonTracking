@@ -12,6 +12,10 @@ Directory.CreateDirectory(modelsPath);
 var yoloModelExport = builder.AddContainer("yolo-model-export", "yolo-model-export")
     .WithBindMount(modelsPath, "/models");
 
+// Add fashion model export container (runs once to export the fashion model to shared volume)
+var fashionModelExport = builder.AddContainer("fashion-model-export", "fashion-model-export")
+    .WithBindMount(modelsPath, "/models");
+
 // Add Azure Blob Storage emulator (Azurite)
 var storage = builder.AddAzureStorage("storage")
     .RunAsEmulator();
@@ -20,11 +24,15 @@ var blobs = storage.AddBlobs("blobs");
 // Add Redis for caching
 var redis = builder.AddRedis("redis");
 
-// Add API with model path configured via environment variable
-// Note: We don't wait for yoloModelExport because it's designed to exit after completing the export
-// The API will validate that the model file exists during startup instead
+// Add API with model paths configured via environment variables
+// Note: We don't wait for yoloModelExport or fashionModelExport because they're designed to exit after completing the export
+// The API services (ObjectDetectionService, ClothingDetectionService) validate that model files exist during startup
+// If a model is missing, the corresponding service logs a warning and gracefully disables that feature
 var api = builder.AddProject<Projects.ADCommsPersonTracking_Api>("adcommspersontracking-api")
     .WithEnvironment("ObjectDetection__ModelPath", Path.Combine(modelsPath, yoloModel))
+    .WithEnvironment("ClothingDetection__Enabled", "true")
+    .WithEnvironment("ClothingDetection__ModelPath", Path.Combine(modelsPath, "fashion-yolo.onnx"))
+    .WithEnvironment("ClothingDetection__ConfidenceThreshold", "0.5")
     .WithReference(blobs)
     .WithReference(redis)
     .WithExternalHttpEndpoints();
